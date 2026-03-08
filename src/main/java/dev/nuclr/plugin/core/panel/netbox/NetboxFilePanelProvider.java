@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
-import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -29,9 +28,11 @@ import javax.swing.JTextField;
 
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.session.ClientSession;
+import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
 import org.apache.sshd.common.NamedResource;
 import org.apache.sshd.common.config.keys.FilePasswordProvider;
 import org.apache.sshd.common.util.security.SecurityUtils;
+import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.fs.SftpFileSystemProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,43 +83,20 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
     public synchronized List<PanelRoot> roots() {
         ensureLayout();
         var configs = loadConfigs();
-        var roots = new ArrayList<PanelRoot>();
-        roots.add(new PanelRoot("NetBox Servers", serverListRoot));
+        syncServerListView(configs);
 
         var activeIds = new java.util.HashSet<String>();
         for (ServerConfig cfg : configs) {
             activeIds.add(cfg.id());
-            String label = cfg.protocol().toUpperCase() + ": " + cfg.host() + ":" + cfg.port() + " (" + cfg.username() + ")";
-
-            if ("ftp".equalsIgnoreCase(cfg.protocol())) {
-                Path placeholder = unsupportedRoot.resolve(cfg.id());
-                writeStatus(placeholder, "FTP support is planned.\nThis build supports SFTP and SCP now.");
-                roots.add(new PanelRoot(label, placeholder));
-                continue;
-            }
-
-            try {
-                MountedConnection mounted = mounts.get(cfg.id());
-                if (mounted == null || mounted.closed()) {
-                    mounted = openConnection(cfg);
-                    mounts.put(cfg.id(), mounted);
-                }
-                roots.add(new PanelRoot(label, mounted.root()));
-            } catch (Exception ex) {
-                Path placeholder = unsupportedRoot.resolve(cfg.id());
-                writeStatus(placeholder, "Cannot connect:\n" + ex.getMessage());
-                roots.add(new PanelRoot(label, placeholder));
-            }
         }
 
-        // Drop stale mounts removed from configuration.
         for (String id : List.copyOf(mounts.keySet())) {
             if (!activeIds.contains(id)) {
                 closeQuietly(mounts.remove(id));
             }
         }
 
-        return roots;
+        return List.of(new PanelRoot("NetBox", serverListRoot));
     }
 
     @Override
@@ -150,6 +128,49 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             }
             return editServerConfig(currentDirectory, selectedPath);
         };
+    }
+
+    @Override
+    public Path resolveEnter(Path currentDirectory, Path selectedPath) {
+        if (currentDirectory == null || selectedPath == null) {
+            return selectedPath;
+        }
+        Path current = currentDirectory.toAbsolutePath().normalize();
+        if (!current.equals(serverListRoot.toAbsolutePath().normalize())) {
+            return selectedPath;
+        }
+
+        String configId = readServerConfigId(selectedPath);
+        if (configId == null) {
+            return selectedPath;
+        }
+
+        ServerConfig cfg = loadConfigs().stream()
+                .filter(c -> Objects.equals(c.id(), configId))
+                .findFirst()
+                .orElse(null);
+        if (cfg == null) {
+            return selectedPath;
+        }
+
+        if ("ftp".equalsIgnoreCase(cfg.protocol())) {
+            Path placeholder = unsupportedRoot.resolve(cfg.id());
+            writeStatus(placeholder, "FTP support is planned.\nThis build supports SFTP and SCP now.");
+            return placeholder;
+        }
+
+        try {
+            MountedConnection mounted = mounts.get(cfg.id());
+            if (mounted == null || mounted.closed()) {
+                mounted = openConnection(cfg);
+                mounts.put(cfg.id(), mounted);
+            }
+            return mounted.root();
+        } catch (Exception ex) {
+            Path placeholder = unsupportedRoot.resolve(cfg.id());
+            writeStatus(placeholder, "Cannot connect:\n" + ex.getMessage());
+            return placeholder;
+        }
     }
 
     @Override
@@ -268,48 +289,68 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
     private MountedConnection openConnection(ServerConfig cfg) throws IOException, GeneralSecurityException {
         int port = cfg.port() > 0 ? cfg.port() : defaultPort(cfg.protocol());
         if ("scp".equalsIgnoreCase(cfg.protocol()) || "sftp".equalsIgnoreCase(cfg.protocol())) {
-            if (cfg.privateKeyPath() != null && !cfg.privateKeyPath().isBlank()) {
-                return connectWithKey(cfg, port);
-            }
-            var uri = SftpFileSystemProvider.createFileSystemURI(cfg.host(), port, cfg.username(), cfg.password());
-            FileSystem fs;
-            try {
-                fs = sftpProvider.newFileSystem(uri, Map.of());
-            } catch (FileSystemAlreadyExistsException ex) {
-                fs = sftpProvider.getFileSystem(uri);
-            }
-            return new MountedConnection(cfg.id(), cfg.protocol(), fs, fs.getPath("/"), null, null);
+            return connectWithSshSession(cfg, port);
         }
         throw new IOException("Unsupported protocol: " + cfg.protocol());
     }
 
-    private MountedConnection connectWithKey(ServerConfig cfg, int port) throws IOException, GeneralSecurityException {
+    private MountedConnection connectWithSshSession(ServerConfig cfg, int port) throws IOException, GeneralSecurityException {
         var client = SshClient.setUpDefaultClient();
+        client.setServerKeyVerifier(AcceptAllServerKeyVerifier.INSTANCE);
         client.start();
 
         var session = client.connect(cfg.username(), cfg.host(), port)
                 .verify(SSH_CONNECT_TIMEOUT_MS)
                 .getSession();
 
-        if (cfg.password() != null && !cfg.password().isBlank()) {
-            session.addPasswordIdentity(cfg.password());
-        }
-
-        Path keyPath = Path.of(cfg.privateKeyPath());
-        try (InputStream in = Files.newInputStream(keyPath)) {
-            var pairs = SecurityUtils.loadKeyPairIdentities(
-                    session,
-                    NamedResource.ofName(keyPath.toString()),
-                    in,
-                    FilePasswordProvider.of(cfg.password()));
-            for (var pair : pairs) {
-                session.addPublicKeyIdentity(pair);
+        if (cfg.privateKeyPath() != null && !cfg.privateKeyPath().isBlank()) {
+            Path keyPath = Path.of(cfg.privateKeyPath());
+            try (InputStream in = Files.newInputStream(keyPath)) {
+                var pairs = SecurityUtils.loadKeyPairIdentities(
+                        session,
+                        NamedResource.ofName(keyPath.toString()),
+                        in,
+                        FilePasswordProvider.of(cfg.password()));
+                for (var pair : pairs) {
+                    session.addPublicKeyIdentity(pair);
+                }
             }
+        } else if (cfg.password() != null && !cfg.password().isBlank()) {
+            session.addPasswordIdentity(cfg.password());
         }
 
         session.auth().verify(SSH_AUTH_TIMEOUT_MS);
         FileSystem fs = sftpProvider.newFileSystem(session);
-        return new MountedConnection(cfg.id(), cfg.protocol(), fs, fs.getPath("/"), client, session);
+        Path start = resolveInitialRemotePath(fs, session);
+        return new MountedConnection(cfg.id(), cfg.protocol(), fs, start, client, session);
+    }
+
+    private Path resolveInitialRemotePath(FileSystem fs, ClientSession session) {
+        Path home = null;
+        try (SftpClient sftp = org.apache.sshd.sftp.client.SftpClientFactory.instance().createSftpClient(session)) {
+            String pwd = sftp.canonicalPath(".");
+            if (pwd != null && !pwd.isBlank()) {
+                home = fs.getPath(pwd);
+            }
+        } catch (Exception ex) {
+            log.debug("Cannot resolve SFTP home path: {}", ex.getMessage());
+        }
+
+        for (Path candidate : List.of(
+                home,
+                fs.getPath(".").toAbsolutePath().normalize(),
+                fs.getPath("/"))) {
+            if (candidate == null) {
+                continue;
+            }
+            try {
+                if (Files.isDirectory(candidate) && Files.isReadable(candidate)) {
+                    return candidate;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return fs.getPath("/");
     }
 
     private boolean createServerConfig() {
@@ -328,6 +369,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
         var all = new ArrayList<>(loadConfigs());
         all.add(created);
         saveConfigs(all);
+        syncServerListView(all);
         return true;
     }
 
@@ -371,6 +413,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
         }
         saveConfigs(all);
         closeQuietly(mounts.remove(edited.id()));
+        syncServerListView(all);
         return true;
     }
 
@@ -389,6 +432,12 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
         }
 
         Path normalized = probe.toAbsolutePath().normalize();
+        if (normalized.startsWith(serverListRoot.toAbsolutePath().normalize())) {
+            String id = readServerConfigId(probe);
+            if (id != null) {
+                return all.stream().filter(c -> Objects.equals(c.id(), id)).findFirst().orElse(null);
+            }
+        }
         if (normalized.startsWith(unsupportedRoot.toAbsolutePath().normalize())) {
             if (normalized.getNameCount() > unsupportedRoot.toAbsolutePath().normalize().getNameCount()) {
                 String id = normalized.getName(unsupportedRoot.toAbsolutePath().normalize().getNameCount()).toString();
@@ -477,6 +526,63 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
         }
     }
 
+    private synchronized void syncServerListView(List<ServerConfig> configs) {
+        ensureLayout();
+        var expectedDirs = new java.util.HashSet<Path>();
+        for (ServerConfig cfg : configs) {
+            Path dir = serverListRoot.resolve(serverEntryName(cfg));
+            expectedDirs.add(dir.toAbsolutePath().normalize());
+            try {
+                Files.createDirectories(dir);
+                Files.writeString(dir.resolve(".netbox-id"), cfg.id(), StandardCharsets.UTF_8);
+                Files.writeString(
+                        dir.resolve("README.txt"),
+                        "Protocol: " + cfg.protocol().toUpperCase() + "\n"
+                                + "Host: " + cfg.host() + "\n"
+                                + "Port: " + cfg.port() + "\n"
+                                + "Username: " + cfg.username() + "\n"
+                                + "\nEnter to connect and open remote root.\n"
+                                + "F4 to edit config, Shift+F4 to create.",
+                        StandardCharsets.UTF_8);
+            } catch (IOException ex) {
+                log.warn("Cannot prepare NetBox server entry [{}]: {}", dir, ex.getMessage());
+            }
+        }
+
+        try (var stream = Files.list(serverListRoot)) {
+            for (Path child : stream.toList()) {
+                if (!Files.isDirectory(child)) {
+                    continue;
+                }
+                if (expectedDirs.contains(child.toAbsolutePath().normalize())) {
+                    continue;
+                }
+                deleteRecursively(child);
+            }
+        } catch (IOException ex) {
+            log.warn("Cannot clean stale NetBox entries: {}", ex.getMessage());
+        }
+    }
+
+    private String readServerConfigId(Path path) {
+        if (path == null) {
+            return null;
+        }
+        Path probe = Files.isDirectory(path) ? path : path.getParent();
+        if (probe == null) {
+            return null;
+        }
+        Path marker = probe.resolve(".netbox-id");
+        if (!Files.exists(marker)) {
+            return null;
+        }
+        try {
+            return Files.readString(marker, StandardCharsets.UTF_8).strip();
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
     private List<ServerConfig> loadConfigs() {
         ensureLayout();
         try {
@@ -549,6 +655,12 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
         return 22;
     }
 
+    private static String serverEntryName(ServerConfig cfg) {
+        String raw = cfg.protocol().toUpperCase() + "_" + cfg.host() + "_" + cfg.port() + "_" + cfg.username();
+        String safe = raw.replaceAll("[^A-Za-z0-9._-]", "_");
+        return safe + "__" + cfg.id().substring(0, Math.min(8, cfg.id().length()));
+    }
+
     private void closeQuietly(MountedConnection mount) {
         if (mount == null) {
             return;
@@ -557,6 +669,20 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             mount.close();
         } catch (Exception ignored) {
         }
+    }
+
+    private void deleteRecursively(Path path) throws IOException {
+        if (!Files.exists(path)) {
+            return;
+        }
+        if (Files.isDirectory(path)) {
+            try (var stream = Files.list(path)) {
+                for (Path child : stream.toList()) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        Files.deleteIfExists(path);
     }
 
     private record ServerConfig(
