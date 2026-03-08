@@ -1,4 +1,4 @@
-package dev.nuclr.plugin.core.panel.netbox;
+package dev.nuclr.plugin.core.panel.net;
 
 import java.awt.GridLayout;
 import java.io.IOException;
@@ -49,8 +49,8 @@ import dev.nuclr.plugin.panel.FilePanelProvider;
 import dev.nuclr.plugin.panel.PanelFunctionKeyHandler;
 import dev.nuclr.plugin.panel.PanelRoot;
 
-public class NetboxFilePanelProvider implements FilePanelProvider {
-    private static final Logger log = LoggerFactory.getLogger(NetboxFilePanelProvider.class);
+public class NetFilePanelProvider implements FilePanelProvider {
+    private static final Logger log = LoggerFactory.getLogger(NetFilePanelProvider.class);
 
     private static final int SSH_CONNECT_TIMEOUT_MS = 4_000;
     private static final int SSH_AUTH_TIMEOUT_MS = 8_000;
@@ -59,19 +59,19 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
     private final SftpFileSystemProvider sftpProvider = new SftpFileSystemProvider();
     private final Map<String, MountedConnection> mounts = new ConcurrentHashMap<>();
 
-    private final Path mountBase = Path.of(System.getProperty("java.io.tmpdir"), "nuclr", "netbox");
+    private final Path mountBase = Path.of(System.getProperty("java.io.tmpdir"), "nuclr", "net");
     private final Path serverListRoot = mountBase.resolve("Servers");
     private final Path unsupportedRoot = mountBase.resolve("unsupported");
-    private final Path configFile = Path.of(System.getProperty("user.home"), ".nuclr", "netbox", "servers.json");
+    private final Path configFile = Path.of(System.getProperty("user.home"), ".nuclr", "net", "servers.json");
 
     @Override
     public String id() {
-        return "netbox";
+        return "net";
     }
 
     @Override
     public String displayName() {
-        return "NetBox";
+        return "Net";
     }
 
     @Override
@@ -96,7 +96,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             }
         }
 
-        return List.of(new PanelRoot("NetBox", serverListRoot));
+        return List.of(new PanelRoot("Net", serverListRoot));
     }
 
     @Override
@@ -362,7 +362,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
                 "",
                 "",
                 "");
-        ServerConfig created = showConfigDialog("Create NetBox Server", draft);
+        ServerConfig created = showConfigDialog("Create Net Server", draft);
         if (created == null) {
             return true;
         }
@@ -376,7 +376,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
     private boolean editServerConfig(Path currentDirectory, Path selectedPath) {
         var all = new ArrayList<>(loadConfigs());
         if (all.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "No NetBox server configs yet. Use Shift+F4 to create one.");
+            JOptionPane.showMessageDialog(null, "No Net server configs yet. Use Shift+F4 to create one.");
             return true;
         }
 
@@ -386,7 +386,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             Object picked = JOptionPane.showInputDialog(
                     null,
                     "Choose server to edit:",
-                    "Edit NetBox Server",
+                    "Edit Net Server",
                     JOptionPane.PLAIN_MESSAGE,
                     null,
                     names,
@@ -400,7 +400,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             return true;
         }
 
-        ServerConfig edited = showConfigDialog("Edit NetBox Server", selected);
+        ServerConfig edited = showConfigDialog("Edit Net Server", selected);
         if (edited == null) {
             return true;
         }
@@ -515,14 +515,14 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             }
             Files.writeString(
                     serverListRoot.resolve("README.txt"),
-                    "NetBox server list is configured via shortcuts:\n"
+                    "Net server list is configured via shortcuts:\n"
                             + "Shift+F4 - create server\n"
                             + "F4 - edit server\n\n"
                             + "Configuration file:\n"
                             + configFile,
                     StandardCharsets.UTF_8);
         } catch (IOException ex) {
-            throw new RuntimeException("Cannot initialize NetBox layout: " + ex.getMessage(), ex);
+            throw new RuntimeException("Cannot initialize Net layout: " + ex.getMessage(), ex);
         }
     }
 
@@ -534,7 +534,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             expectedDirs.add(dir.toAbsolutePath().normalize());
             try {
                 Files.createDirectories(dir);
-                Files.writeString(dir.resolve(".netbox-id"), cfg.id(), StandardCharsets.UTF_8);
+                Files.writeString(dir.resolve(".net-id"), cfg.id(), StandardCharsets.UTF_8);
                 Files.writeString(
                         dir.resolve("README.txt"),
                         "Protocol: " + cfg.protocol().toUpperCase() + "\n"
@@ -545,7 +545,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
                                 + "F4 to edit config, Shift+F4 to create.",
                         StandardCharsets.UTF_8);
             } catch (IOException ex) {
-                log.warn("Cannot prepare NetBox server entry [{}]: {}", dir, ex.getMessage());
+                log.warn("Cannot prepare Net server entry [{}]: {}", dir, ex.getMessage());
             }
         }
 
@@ -560,7 +560,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
                 deleteRecursively(child);
             }
         } catch (IOException ex) {
-            log.warn("Cannot clean stale NetBox entries: {}", ex.getMessage());
+            log.warn("Cannot clean stale Net entries: {}", ex.getMessage());
         }
     }
 
@@ -572,7 +572,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
         if (probe == null) {
             return null;
         }
-        Path marker = probe.resolve(".netbox-id");
+        Path marker = probe.resolve(".net-id");
         if (!Files.exists(marker)) {
             return null;
         }
@@ -603,7 +603,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
                     .sorted(Comparator.comparing(ServerConfig::protocol).thenComparing(ServerConfig::host))
                     .toList();
         } catch (Exception ex) {
-            log.warn("Cannot read NetBox config: {}", ex.getMessage());
+            log.warn("Cannot read Net config: {}", ex.getMessage());
             return List.of();
         }
     }
@@ -613,7 +613,7 @@ public class NetboxFilePanelProvider implements FilePanelProvider {
             Files.createDirectories(configFile.getParent());
             mapper.writerWithDefaultPrettyPrinter().writeValue(configFile.toFile(), configs);
         } catch (IOException ex) {
-            throw new RuntimeException("Cannot save NetBox config: " + ex.getMessage(), ex);
+            throw new RuntimeException("Cannot save Net config: " + ex.getMessage(), ex);
         }
     }
 

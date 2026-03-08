@@ -5,9 +5,9 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>dev.nuclr.plugin.core</groupId>
-	<artifactId>filepanel-netbox</artifactId>
+	<artifactId>filepanel-net</artifactId>
 	<version>1.0.0</version>
-	<name>Nuclr File Panel - NetBox</name>
+	<name>Nuclr File Panel - Net</name>
 
 	<properties>
 		<maven.compiler.source>21</maven.compiler.source>

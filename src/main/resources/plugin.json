@@ -1,16 +1,16 @@
 {
 	"schemaVersion": 1,
-	"name": "NetBox Remote Panel",
-	"id": "dev.nuclr.plugin.core.panel.netbox",
+	"name": "Net Remote Panel",
+	"id": "dev.nuclr.plugin.core.panel.net",
 	"version": "1.0.0",
 	"description": "Remote FilePanel provider for FTP/SFTP/SCP server profiles.",
 	"author": "Nuclr Development Team",
 	"license": "Apache-2.0",
 	"website": "https://nuclr.dev",
-	"pageUrl": "https://nuclr.dev/plugins/core/filepanel-netbox.html",
-	"docUrl": "https://nuclr.dev/plugins/core/filepanel-netbox.html",
+	"pageUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
+	"docUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
 	"type": "Official",
 	"filePanelProviders": [
-		"dev.nuclr.plugin.core.panel.netbox.NetboxFilePanelProvider"
+		"dev.nuclr.plugin.core.panel.net.NetFilePanelProvider"
 	]
 }
