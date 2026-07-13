@@ -103,7 +103,7 @@ public class NetDeleteService {
 		sb.append("<br/>This cannot be undone.</html>");
 
 		Alerts.popup(context);
-		return Alerts.confirm(context, DialogTitle, sb.toString());
+		return Alerts.confirmDestructive(context, DialogTitle, sb.toString());
 	}
 
 	/**

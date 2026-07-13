@@ -39,6 +39,7 @@ import org.apache.sshd.scp.common.helpers.ScpTimestampCommandDetails;
 
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -233,7 +234,11 @@ public final class NetTransferEngine {
 
 		long size = Files.size(source);
 
-		if (source.getFileSystem() == FileSystems.getDefault()) {
+		// MINA's SCP client embeds the remote path unquoted into the exec command it
+		// sends the server (see ShellEscape.isSafeForUnquotedScp) — safe only for
+		// plain ASCII-ish paths, so anything else falls back to the always-correct
+		// (if slower) SFTP stream copy.
+		if (source.getFileSystem() == FileSystems.getDefault() && ShellEscape.isSafeForUnquotedScp(target.toString())) {
 			uploadViaScp(source, target, size);
 		} else {
 			streamCopy(source, target);

@@ -43,6 +43,23 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- FlatSVGIcon for the text-field context menus (Cut/Copy/Paste/Undo/Redo/Select
+		     All). Provided by the commander host at runtime (loaded by the parent
+		     classloader), so compile-time only here and must NOT be bundled into the
+		     plugin — matches filepanel-fs's convention for the same dependency. -->
+		<dependency>
+			<groupId>com.formdev</groupId>
+			<artifactId>flatlaf</artifactId>
+			<version>3.7.1</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.formdev</groupId>
+			<artifactId>flatlaf-extras</artifactId>
+			<version>3.7.1</version>
+			<scope>provided</scope>
+		</dependency>
+
 		<!-- Apache MINA SSHD: SFTP filesystem operations, SCP transfers and PuTTY PPK
 		     key support. Not provided by the host, so these ship in the plugin
 		     bundle's lib/ (compile scope). -->

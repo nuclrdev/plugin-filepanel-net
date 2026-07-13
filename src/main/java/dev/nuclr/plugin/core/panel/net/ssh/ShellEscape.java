@@ -64,4 +64,41 @@ public final class ShellEscape {
 		return sb.toString();
 	}
 
+	/**
+	 * Return {@code true} when {@code path} contains only characters that are
+	 * safe to embed <b>unquoted</b> in a shell command line.
+	 *
+	 * <p>Apache MINA's SCP client ({@code ScpClient.upload}/{@code download})
+	 * builds its {@code scp -t}/{@code scp -f} exec command by concatenating
+	 * the remote path directly into the command string, with no shell quoting
+	 * at all — a MINA limitation, not something callers can override, since the
+	 * same string is also used verbatim as the literal filename recorded in the
+	 * SCP protocol stream (quoting it would corrupt that filename instead).
+	 * Most SSH servers run exec commands through a shell, so a path containing
+	 * spaces, parentheses or other shell-significant characters silently
+	 * breaks the remote {@code scp} invocation (typically surfacing as an
+	 * {@code EOFException: readAck - EOF before ACK}, since the shell fails to
+	 * even start the command). Callers should check this before choosing SCP
+	 * for a given path and fall back to a plain SFTP read/write otherwise.
+	 *
+	 * @param path the remote path to check
+	 * @return {@code true} when the path is safe to pass to MINA's SCP client unquoted
+	 */
+	public static boolean isSafeForUnquotedScp(String path) {
+
+		if (path == null || path.isEmpty()) {
+			return false;
+		}
+
+		for (int i = 0; i < path.length(); i++) {
+			char c = path.charAt(i);
+			boolean safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+					|| c == '/' || c == '.' || c == '_' || c == '-';
+			if (!safe) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 }

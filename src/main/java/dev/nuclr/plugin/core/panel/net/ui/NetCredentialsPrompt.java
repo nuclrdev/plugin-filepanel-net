@@ -91,10 +91,12 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 
 		final int[] choice = new int[1];
 		Alerts.runOnEdtAndWait(() -> {
+			// showConfirmDialog blocks until dismissed, so requesting focus AFTER it
+			// returns would be a no-op; queuing it first means it runs once the modal
+			// dialog is up and pumping the event queue, while it's still visible.
+			javax.swing.SwingUtilities.invokeLater(field::requestFocusInWindow);
 			choice[0] = JOptionPane.showConfirmDialog(null, panel, title,
 					JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
-			// Request focus after the dialog is shown so the user can type immediately.
-			field.requestFocusInWindow();
 		});
 
 		if (choice[0] != JOptionPane.OK_OPTION) {

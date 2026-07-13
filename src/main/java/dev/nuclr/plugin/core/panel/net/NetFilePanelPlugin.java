@@ -424,6 +424,29 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			}
 		}
 
+		List<NetResource> children = NetDirectoryCache.get(serverId, remotePath);
+
+		if (children == null) {
+			children = fetchChildren(connection, serverId, remotePath, cancelled);
+			if (!isCancelled(cancelled)) {
+				NetDirectoryCache.put(serverId, remotePath, children);
+			}
+		}
+
+		for (var child : children) {
+			data.getEntries().add(child);
+			if (sink != null) {
+				sink.add(child);
+			}
+		}
+
+		return data;
+	}
+
+	/** SFTP {@code readDir} for one folder, sorted folders-first/alphabetically. Not cached itself. */
+	private List<NetResource> fetchChildren(NetConnection connection, String serverId, String remotePath,
+			AtomicBoolean cancelled) {
+
 		var children = new ArrayList<NetResource>();
 
 		try (SftpClient sftp = connection.sftp()) {
@@ -453,14 +476,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		children.sort(java.util.Comparator.comparing((NetResource r) -> !r.isFolder())
 				.thenComparing(NetResource::getName, String.CASE_INSENSITIVE_ORDER));
 
-		for (var child : children) {
-			data.getEntries().add(child);
-			if (sink != null) {
-				sink.add(child);
-			}
-		}
-
-		return data;
+		return children;
 	}
 
 	/**
@@ -573,8 +589,29 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		items.add(menu("Delete", "F8", "filepanel.delete"));
 		items.add(menu("Create file", "Shift+F4", "createFile"));
 		items.add(menu("Find", "Alt+F7", "find"));
+		addSortMenuItems(items);
 
 		return items;
+	}
+
+	/**
+	 * Ctrl+F3..F12 sort slots. Only sorts genuinely backed by an SFTP attribute
+	 * are offered: {@code Created}/{@code Accessed} are omitted because most
+	 * SFTP servers don't report a reliable creation time, and report the same
+	 * access time as the modification time, which would make those entries
+	 * silently duplicate "Modified" instead of doing something distinct.
+	 */
+	private static void addSortMenuItems(List<NuclrMenuResource> items) {
+		items.add(sortByColumn("Name", "Ctrl+F3", "name"));
+		items.add(sortByColumn("Extension", "Ctrl+F4", "ext"));
+		items.add(sortByColumn("Modified", "Ctrl+F5", "modified"));
+		items.add(sortByColumn("Size", "Ctrl+F6", "size"));
+		items.add(menu("Unsort", "Ctrl+F7", "filepanel.sort:unsorted"));
+		items.add(menu("Sort", "Ctrl+F12", "filepanel.sort:dialog"));
+	}
+
+	private static NuclrMenuResource sortByColumn(String columnName, String functionKey, String criterion) {
+		return menu(columnName, functionKey, "filepanel.sort:" + criterion + ":" + columnName);
 	}
 
 	private static NuclrMenuResource menu(String name, String functionKey, String eventType) {
@@ -585,22 +622,28 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	public List<NuclrContextMenuItem> contextMenuItems(NuclrResource focusedResource,
 			List<NuclrResource> selectedResources) {
 
+		// iconKey values follow the SDK's documented convention (a key the commander's icon theme
+		// resolves, e.g. "delete", "copy"); the commander does not yet render context-menu icons for
+		// any plugin, but these are set now so the menu picks them up automatically once it does.
 		if (currentConnection == null) {
 			return List.of(
-					NuclrContextMenuItem.builder().label("New Server").actionType("net.server.new").build(),
-					NuclrContextMenuItem.builder().label("Edit Server").actionType("net.server.edit").build(),
+					NuclrContextMenuItem.builder().label("New Server").actionType("net.server.new")
+							.iconKey("server-add").build(),
+					NuclrContextMenuItem.builder().label("Edit Server").actionType("net.server.edit")
+							.iconKey("edit").build(),
 					NuclrContextMenuItem.separator(),
 					NuclrContextMenuItem.builder().label("Remove Server").actionType("net.server.remove")
-							.destructive(true).build());
+							.iconKey("delete").destructive(true).build());
 		}
 
 		var items = new ArrayList<NuclrContextMenuItem>();
 		if (focusedResource != null && !focusedResource.isFolder() && !"..".equals(focusedResource.getName())) {
-			items.add(NuclrContextMenuItem.builder().label("Tail -F").actionType("net.tail").build());
+			items.add(NuclrContextMenuItem.builder().label("Tail -F").actionType("net.tail")
+					.iconKey("terminal").build());
 			items.add(NuclrContextMenuItem.separator());
 		}
-		items.add(NuclrContextMenuItem.builder().label("Delete").actionType("filepanel.delete").destructive(true)
-				.build());
+		items.add(NuclrContextMenuItem.builder().label("Delete").actionType("filepanel.delete")
+				.iconKey("delete").destructive(true).build());
 		return items;
 	}
 
@@ -673,9 +716,25 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			case "filepanel.move" -> bridgeMove(other, selectedResources, focusedResource, data, callback);
 			case AcceptCopy -> acceptCopy(selectedResources, focusedResource, data);
 			case AcceptMove -> acceptMove(selectedResources, focusedResource, data);
+			case "refresh.panel" -> invalidateCurrentFolderCache();
 			default -> {
 				// Unknown action: nothing to do.
 			}
+		}
+	}
+
+	/**
+	 * Drop the cached listing for the panel's current remote folder, if any.
+	 * Directory listings are cached (see {@link NetDirectoryCache}) to avoid a
+	 * round trip on routine navigation; this is the one place that cache is
+	 * invalidated on the user's explicit request (Ctrl+R "Refresh"). The
+	 * commander re-opens the current resource right after this action returns,
+	 * so the cache miss that follows is enough to force a fresh SFTP listing —
+	 * no separate re-fetch is triggered here.
+	 */
+	private void invalidateCurrentFolderCache() {
+		if (currentConnection != null && currentFolder instanceof NetResource folder) {
+			NetDirectoryCache.invalidate(currentConnection.serverId(), folder.remotePath());
 		}
 	}
 
@@ -703,6 +762,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		}
 		if (other == null || other.uuid().equals(this.uuid()) || other.is(BaseNuclrPlugin.Type.QuickView)) {
 			if (new NetMoveService().renameInPlace(focusedResource, context)) {
+				invalidateCurrentFolderCache();
 				data.put("result.refresh", true);
 			}
 			return;
@@ -717,6 +777,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 		new NetCopyService().copy(currentConnection, currentFolder, selectedResources, focusedResource, context);
+		invalidateCurrentFolderCache();
 		context.getEventBus().emit("refresh.plugin.file.panel", Map.of("plugin.uuid", uuid), null);
 	}
 
@@ -727,6 +788,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 		new NetMoveService().move(currentConnection, currentFolder, selectedResources, focusedResource, context);
+		invalidateCurrentFolderCache();
 		context.getEventBus().emit("refresh.plugin.file.panel", Map.of("plugin.uuid", uuid), null);
 	}
 
@@ -754,6 +816,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		if (created == null) {
 			return;
 		}
+		invalidateCurrentFolderCache();
 		data.put("result.refresh", true);
 	}
 
@@ -765,6 +828,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		if (created == null) {
 			return;
 		}
+		invalidateCurrentFolderCache();
 		data.put("result.refresh", true);
 	}
 
@@ -781,6 +845,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			targets.add(focusedResource);
 		}
 		if (new NetDeleteService().delete(targets, context)) {
+			invalidateCurrentFolderCache();
 			data.put("result.refresh", true);
 		}
 	}
@@ -876,9 +941,10 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 
-		// Settings may have changed (host, auth, …): drop any live session so the
-		// next connect picks up the new configuration.
+		// Settings may have changed (host, auth, …): drop any live session and cached
+		// listings so the next connect picks up the new configuration and content.
 		ConnectionRegistry.closeAndRemove(serverId);
+		NetDirectoryCache.invalidateServer(serverId);
 
 		if (!saveProfile(result)) {
 			return;
@@ -921,7 +987,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 
-		if (!Alerts.confirm(context, "Remove Server",
+		if (!Alerts.confirmDestructive(context, "Remove Server",
 				"Remove " + ids.size() + " server profile(s)? Any open connection will be closed.")) {
 			Alerts.cancel(context);
 			return;
@@ -929,6 +995,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 		for (String id : ids) {
 			ConnectionRegistry.closeAndRemove(id);
+			NetDirectoryCache.invalidateServer(id);
 			try {
 				serverStore.remove(id);
 			} catch (IOException e) {

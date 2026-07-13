@@ -24,6 +24,7 @@ import javax.swing.JComponent;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
+import javax.swing.UIManager;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.text.AbstractDocument;
@@ -32,6 +33,8 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
 import javax.swing.text.JTextComponent;
 import javax.swing.undo.UndoManager;
+
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 /**
  * Editing conveniences shared by every text field in the Net panel's dialogs:
@@ -73,17 +76,17 @@ public final class TextFieldSupport {
 		bindKey(field, "control Y", "net-redo", redo);
 		bindKey(field, "control shift Z", "net-redo-alt", redo);
 
-		var undoItem = new JMenuItem("Undo");
+		var undoItem = new JMenuItem("Undo", menuIcon("undo"));
 		undoItem.addActionListener(e -> undo.run());
-		var redoItem = new JMenuItem("Redo");
+		var redoItem = new JMenuItem("Redo", menuIcon("redo"));
 		redoItem.addActionListener(e -> redo.run());
-		var cutItem = new JMenuItem("Cut");
+		var cutItem = new JMenuItem("Cut", menuIcon("cut"));
 		cutItem.addActionListener(e -> field.cut());
-		var copyItem = new JMenuItem("Copy");
+		var copyItem = new JMenuItem("Copy", menuIcon("copy"));
 		copyItem.addActionListener(e -> field.copy());
-		var pasteItem = new JMenuItem("Paste");
+		var pasteItem = new JMenuItem("Paste", menuIcon("paste"));
 		pasteItem.addActionListener(e -> field.paste());
-		var selectAllItem = new JMenuItem("Select All");
+		var selectAllItem = new JMenuItem("Select All", menuIcon("select-all"));
 		selectAllItem.addActionListener(e -> field.selectAll());
 
 		var menu = new JPopupMenu();
@@ -119,6 +122,18 @@ public final class TextFieldSupport {
 		});
 
 		field.setComponentPopupMenu(menu);
+	}
+
+	/**
+	 * Load a 16x16 menu icon bundled with this plugin ({@code icons/<name>.svg})
+	 * and recolor it to the current look-and-feel's menu-item foreground, so it
+	 * tracks light/dark theme changes — the same pattern the commander itself
+	 * uses for its own menu icons.
+	 */
+	private static FlatSVGIcon menuIcon(String name) {
+		var icon = new FlatSVGIcon("icons/" + name + ".svg", 16, 16, TextFieldSupport.class.getClassLoader());
+		icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> UIManager.getColor("MenuItem.foreground")));
+		return icon;
 	}
 
 	private static void bindKey(JTextComponent field, String keyStroke, String actionKey, Runnable action) {

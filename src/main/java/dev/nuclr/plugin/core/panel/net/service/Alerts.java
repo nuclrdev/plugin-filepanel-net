@@ -73,6 +73,27 @@ public final class Alerts {
 	}
 
 	/**
+	 * Show a yes/no confirmation for an irreversible action (delete, remove),
+	 * with "No" as the default-focused button so pressing Enter (or dismissing
+	 * with a stray keystroke) never confirms the destructive choice by accident.
+	 *
+	 * @param context plugin context, may be {@code null}
+	 * @param title   dialog title
+	 * @param message dialog message (may be HTML)
+	 * @return {@code true} when the user confirmed
+	 */
+	public static boolean confirmDestructive(NuclrPluginContext context, String title, String message) {
+		var result = new boolean[1];
+		Object[] options = { "Yes", "No" };
+		runOnEdtAndWait(() -> {
+			int choice = JOptionPane.showOptionDialog(null, message, title, JOptionPane.DEFAULT_OPTION,
+					JOptionPane.WARNING_MESSAGE, null, options, options[1]);
+			result[0] = choice == 0;
+		});
+		return result[0];
+	}
+
+	/**
 	 * Run the given UI code on the EDT, waiting for it to finish.
 	 *
 	 * @param runnable the UI code

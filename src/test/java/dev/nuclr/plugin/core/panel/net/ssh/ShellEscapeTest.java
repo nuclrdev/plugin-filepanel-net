@@ -18,7 +18,9 @@
 package dev.nuclr.plugin.core.panel.net.ssh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +63,44 @@ class ShellEscapeTest {
 	@Test
 	void rejectsNullArgument() {
 		assertThrows(IllegalArgumentException.class, () -> ShellEscape.quote(null));
+	}
+
+	@Test
+	void plainPathIsSafeForUnquotedScp() {
+		assertTrue(ShellEscape.isSafeForUnquotedScp("/home/alice/report.txt"));
+		assertTrue(ShellEscape.isSafeForUnquotedScp("/var/log/app-2026.01.01.log"));
+		assertTrue(ShellEscape.isSafeForUnquotedScp("/a/b_c/d-e/f.tar.gz"));
+	}
+
+	@Test
+	void pathWithSpaceIsNotSafeForUnquotedScp() {
+		// MINA's ScpClient embeds the remote path unquoted in the exec command it
+		// sends the server; a space would be parsed as a separate shell argument.
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/home/alice/my file.txt"));
+	}
+
+	@Test
+	void pathWithParensIsNotSafeForUnquotedScp() {
+		// Parentheses are shell metacharacters (subshell syntax).
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/home/alice/image (1).png"));
+	}
+
+	@Test
+	void pathWithOtherShellMetacharactersIsNotSafeForUnquotedScp() {
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a;rm -rf b"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/$HOME"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a`b`"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a&b"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a|b"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a'b"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a\"b"));
+		assertFalse(ShellEscape.isSafeForUnquotedScp("/tmp/a*b"));
+	}
+
+	@Test
+	void nullOrEmptyPathIsNotSafeForUnquotedScp() {
+		assertFalse(ShellEscape.isSafeForUnquotedScp(null));
+		assertFalse(ShellEscape.isSafeForUnquotedScp(""));
 	}
 
 }

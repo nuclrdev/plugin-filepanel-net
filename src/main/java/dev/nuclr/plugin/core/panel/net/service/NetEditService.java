@@ -36,8 +36,10 @@ import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
+import dev.nuclr.plugin.core.panel.net.NetDirectoryCache;
 import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -216,7 +218,16 @@ public final class NetEditService implements NuclrEventListener {
 
 				try (OutputStream out = countingOutput(
 						Files.newOutputStream(session.tempFile), callback, expectedSize)) {
-					session.connection.scp().download(session.remotePath, out);
+					// See ShellEscape.isSafeForUnquotedScp: MINA's SCP client can't safely
+					// handle paths with shell-significant characters, so fall back to a
+					// plain SFTP read for those.
+					if (ShellEscape.isSafeForUnquotedScp(session.remotePath)) {
+						session.connection.scp().download(session.remotePath, out);
+					} else {
+						try (InputStream in = Files.newInputStream(session.connection.path(session.remotePath))) {
+							in.transferTo(out);
+						}
+					}
 				}
 				ok[0] = !callback.isCancelled();
 
@@ -338,9 +349,21 @@ public final class NetEditService implements NuclrEventListener {
 		log.info("Uploading {} -> {} (via {})", session.tempFile, session.remotePath, sibling);
 
 		try {
-			try (InputStream in = Files.newInputStream(session.tempFile)) {
-				session.connection.scp().upload(in, sibling, size,
-						java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"), null);
+			// See ShellEscape.isSafeForUnquotedScp: MINA's SCP client can't safely
+			// handle paths with shell-significant characters, so fall back to a
+			// plain SFTP write for those.
+			if (ShellEscape.isSafeForUnquotedScp(sibling)) {
+				try (InputStream in = Files.newInputStream(session.tempFile)) {
+					session.connection.scp().upload(in, sibling, size,
+							java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"), null);
+				}
+			} else {
+				try (InputStream in = Files.newInputStream(session.tempFile);
+						OutputStream out = Files.newOutputStream(session.connection.path(sibling),
+								java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE,
+								java.nio.file.StandardOpenOption.TRUNCATE_EXISTING)) {
+					in.transferTo(out);
+				}
 			}
 			session.connection.atomicReplace(sibling, session.remotePath);
 		} catch (IOException e) {
@@ -355,6 +378,9 @@ public final class NetEditService implements NuclrEventListener {
 
 		recordLocalStamp(session);
 		session.lastRemoteStamp = RemoteStamp.of(session.connection.statOrNull(session.remotePath));
+
+		String parent = RemotePaths.parent(session.remotePath);
+		NetDirectoryCache.invalidate(session.connection.serverId(), parent == null ? "/" : parent);
 	}
 
 	private void cleanup(EditSession session) {
