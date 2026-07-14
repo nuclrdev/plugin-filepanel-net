@@ -79,6 +79,39 @@
 			<version>2.12.1</version>
 		</dependency>
 
+		<!-- sshd-putty declares these as OPTIONAL, so Maven does not pull them in
+		     transitively; without them, PuTTYgen's current default output — PPK v3
+		     with Argon2 KDF for an encrypted key — silently parses to zero usable
+		     keys instead of throwing (PuttyKeyPairResourceParser imports the Argon2
+		     classes directly). Version pinned to exactly what sshd's own POM
+		     specifies for 2.12.1 (bouncycastle.version property). -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.77</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcutil-jdk18on</artifactId>
+			<version>1.77</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk18on</artifactId>
+			<version>1.77</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpg-jdk18on</artifactId>
+			<version>1.77</version>
+		</dependency>
+		<!-- Also optional in sshd-putty: needed for ssh-ed25519 PPK keys. -->
+		<dependency>
+			<groupId>net.i2p.crypto</groupId>
+			<artifactId>eddsa</artifactId>
+			<version>0.3.0</version>
+		</dependency>
+
 		<!-- Test dependencies (JUnit 5 / Jupiter). Provided-scope deps above are
 		     also on the test classpath. -->
 		<dependency>

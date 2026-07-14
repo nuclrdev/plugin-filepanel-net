@@ -128,6 +128,8 @@ src/main/java/dev/nuclr/plugin/core/panel/net/
 | `sshd-sftp` | `2.12.1` | Apache MINA SSHD — SFTP client/filesystem |
 | `sshd-scp` | `2.12.1` | Apache MINA SSHD — SCP transfers |
 | `sshd-putty` | `2.12.1` | Apache MINA SSHD — PuTTY PPK key parsing |
+| `bcprov` / `bcutil` / `bcpkix` / `bcpg-jdk18on` | `1.77` | BouncyCastle — `sshd-putty` declares these as *optional*, but PuTTYgen's current default output (PPK v3, Argon2 KDF for encrypted keys) needs them; version pinned to exactly what `sshd`'s own POM specifies |
+| `eddsa` | `0.3.0` | Also optional in `sshd-putty` — needed for `ssh-ed25519` PPK keys |
 | `jackson-databind` | `2.21.0` | Server profile JSON persistence |
 | `flatlaf` / `flatlaf-extras` | `3.7.1` | `FlatSVGIcon` for the text-field context menus (provided by the commander host at runtime, not bundled) |
 
