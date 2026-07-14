@@ -17,10 +17,12 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
 import dev.nuclr.platform.plugin.NuclrPluginContext;
+import dev.nuclr.plugin.core.panel.net.ui.DialogSupport;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -66,9 +68,15 @@ public final class Alerts {
 	 * @return {@code true} when the user confirmed
 	 */
 	public static boolean confirm(NuclrPluginContext context, String title, String message) {
+		var optionPane = new JOptionPane(message, JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION);
 		var result = new boolean[1];
-		runOnEdtAndWait(() -> result[0] = JOptionPane.showConfirmDialog(null, message, title,
-				JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE) == JOptionPane.YES_OPTION);
+		runOnEdtAndWait(() -> {
+			JDialog dialog = optionPane.createDialog(null, title);
+			DialogSupport.installArrowKeyFocusTraversal(dialog);
+			dialog.setVisible(true);
+			dialog.dispose();
+			result[0] = optionPane.getValue() instanceof Integer choice && choice == JOptionPane.YES_OPTION;
+		});
 		return result[0];
 	}
 
@@ -83,12 +91,16 @@ public final class Alerts {
 	 * @return {@code true} when the user confirmed
 	 */
 	public static boolean confirmDestructive(NuclrPluginContext context, String title, String message) {
-		var result = new boolean[1];
 		Object[] options = { "Yes", "No" };
+		var optionPane = new JOptionPane(message, JOptionPane.WARNING_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
+				options, options[1]);
+		var result = new boolean[1];
 		runOnEdtAndWait(() -> {
-			int choice = JOptionPane.showOptionDialog(null, message, title, JOptionPane.DEFAULT_OPTION,
-					JOptionPane.WARNING_MESSAGE, null, options, options[1]);
-			result[0] = choice == 0;
+			JDialog dialog = optionPane.createDialog(null, title);
+			DialogSupport.installArrowKeyFocusTraversal(dialog);
+			dialog.setVisible(true);
+			dialog.dispose();
+			result[0] = options[0].equals(optionPane.getValue());
 		});
 		return result[0];
 	}

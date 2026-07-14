@@ -118,6 +118,7 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 		final Object[] result = new Object[1];
 		Alerts.runOnEdtAndWait(() -> {
 			JDialog dialog = optionPane.createDialog(null, title);
+			DialogSupport.installArrowKeyFocusTraversal(dialog);
 			dialog.setVisible(true);
 			dialog.dispose();
 			result[0] = optionPane.getValue();
@@ -132,24 +133,18 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 
 	@Override
 	public boolean acceptUnknown(SocketAddress address, String keyType, String fingerprint) {
-		final boolean[] accepted = new boolean[1];
-		Alerts.runOnEdtAndWait(() -> accepted[0] = JOptionPane.showConfirmDialog(
-				null,
+		return confirmYesNo(
 				"<html>The authenticity of host <b>" + address + "</b> can't be established.<br/>"
 						+ keyType + " key fingerprint:<br/><b>" + fingerprint + "</b><br/><br/>"
 						+ "Are you sure you want to continue connecting?</html>",
 				"Unknown Host",
-				JOptionPane.YES_NO_OPTION,
-				JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION);
-		return accepted[0];
+				JOptionPane.WARNING_MESSAGE);
 	}
 
 	@Override
 	public boolean acceptChanged(SocketAddress address, String recordedFingerprint, String presentedKeyType,
 			String presentedFingerprint) {
-		final boolean[] accepted = new boolean[1];
-		Alerts.runOnEdtAndWait(() -> accepted[0] = JOptionPane.showConfirmDialog(
-				null,
+		return confirmYesNo(
 				"<html><b><font color='red'>WARNING: HOST KEY HAS CHANGED!</font></b><br/><br/>"
 						+ "The " + presentedKeyType + " key fingerprint presented by <b>" + address
 						+ "</b> is:<br/><b>" + presentedFingerprint + "</b><br/><br/>"
@@ -159,8 +154,19 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 						+ "Only continue if you can verify the new fingerprint through another channel.<br/>"
 						+ "Continue connecting and update the stored key?</html>",
 				"HOST KEY CHANGED",
-				JOptionPane.YES_NO_OPTION,
-				JOptionPane.ERROR_MESSAGE) == JOptionPane.YES_OPTION);
+				JOptionPane.ERROR_MESSAGE);
+	}
+
+	private boolean confirmYesNo(String message, String title, int messageType) {
+		var optionPane = new JOptionPane(message, messageType, JOptionPane.YES_NO_OPTION);
+		final boolean[] accepted = new boolean[1];
+		Alerts.runOnEdtAndWait(() -> {
+			JDialog dialog = optionPane.createDialog(null, title);
+			DialogSupport.installArrowKeyFocusTraversal(dialog);
+			dialog.setVisible(true);
+			dialog.dispose();
+			accepted[0] = optionPane.getValue() instanceof Integer choice && choice == JOptionPane.YES_OPTION;
+		});
 		return accepted[0];
 	}
 
