@@ -300,4 +300,58 @@ class NetConnectionIntegrationTest {
 		}
 	}
 
+	@Test
+	void wrongPasswordIsDroppedFromCacheSoTheNextAttemptPromptsAgain() throws IOException {
+
+		// Mirrors NetCredentialsPrompt's own caching: consult ConnectionRegistry
+		// first, only "prompting" (counting a call) on a cache miss.
+		var config = new ServerConfig();
+		config.setHost("localhost");
+		config.setPort(port);
+		config.setUsername(USERNAME);
+		config.setAuthMethod(ServerConfig.AuthMethod.PASSWORD);
+
+		var promptCount = new AtomicInteger();
+		NetConnection.CredentialsProvider cacheBackedCredentials = new NetConnection.CredentialsProvider() {
+			@Override
+			public String password(ServerConfig cfg, int retryIndex) {
+				String cached = ConnectionRegistry.cachedPassword(cfg.getId());
+				if (cached != null && retryIndex == 0) {
+					return cached;
+				}
+				promptCount.incrementAndGet();
+				String entered = promptCount.get() == 1 ? "not-the-right-password" : PASSWORD;
+				ConnectionRegistry.cachePassword(cfg.getId(), entered);
+				return entered;
+			}
+
+			@Override
+			public String passphrase(ServerConfig cfg, int retryIndex) {
+				return null;
+			}
+		};
+
+		try (NetConnection connection = new NetConnection(config, AcceptAllServerKeyVerifier.INSTANCE,
+				cacheBackedCredentials)) {
+
+			// First attempt: wrong password, cached, then auth fails.
+			org.junit.jupiter.api.Assertions.assertThrows(IOException.class, connection::ensureOpen);
+			assertEquals(1, promptCount.get());
+
+			// The bug: without dropping the cache on auth failure, this retry would
+			// silently reuse "not-the-right-password" from the cache and never call
+			// the provider again — reproduced here by asserting the cache is now
+			// empty, and that the retry both re-prompts and succeeds.
+			assertNull(ConnectionRegistry.cachedPassword(config.getId()),
+					"a rejected password must not remain cached");
+
+			connection.ensureOpen();
+			assertTrue(connection.isOpen());
+			assertEquals(2, promptCount.get(), "the retry must prompt again rather than reuse the cached bad value");
+
+		} finally {
+			ConnectionRegistry.dropPassword(config.getId());
+		}
+	}
+
 }

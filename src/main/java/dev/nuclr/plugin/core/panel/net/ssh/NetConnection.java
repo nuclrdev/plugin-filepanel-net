@@ -187,6 +187,10 @@ public final class NetConnection implements Closeable {
 			try {
 				identities = KeyLoader.load(Path.of(config.getPrivateKeyPath()), passphraseProvider);
 			} catch (GeneralSecurityException e) {
+				// A wrong passphrase surfaces here as a decryption failure. Drop the
+				// cached value so the next connection attempt prompts again instead of
+				// silently retrying with the same bad passphrase forever.
+				ConnectionRegistry.dropPassphrase(config.getId());
 				throw new IOException("Cannot load private key " + config.getPrivateKeyPath() + ": " + e.getMessage(), e);
 			}
 			identities.forEach(session::addPublicKeyIdentity);
@@ -198,7 +202,17 @@ public final class NetConnection implements Closeable {
 			session.addPasswordIdentity(password);
 		}
 
-		session.auth().verify(AUTH_TIMEOUT);
+		try {
+			session.auth().verify(AUTH_TIMEOUT);
+		} catch (IOException authFailure) {
+			// The server rejected the credentials we just supplied (wrong password,
+			// or a key it doesn't accept): drop whichever secret we cached above so
+			// the next connection attempt prompts fresh rather than silently
+			// reusing the same rejected value.
+			ConnectionRegistry.dropPassword(config.getId());
+			ConnectionRegistry.dropPassphrase(config.getId());
+			throw authFailure;
+		}
 	}
 
 	private String resolveHome() {

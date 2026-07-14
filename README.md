@@ -19,7 +19,7 @@ An official [Nuclr Commander](https://nuclr.dev) plugin that adds a **Net** file
 | 📝 Text / hex editing | F4 downloads to a local temp copy, opens the commander's usual editor picker (text or hex — whichever supports a plain file), watches the copy, detects remote changes made while you edited, and uploads via a hidden temp sibling + atomic SFTP rename |
 | 👁️ View / Quick View | F3 and Ctrl+Q both work directly against the mounted SFTP path — no download needed, since the SFTP filesystem is a real `java.nio.file.FileSystem` |
 | 🔌 Shared sessions | One SSH connection per server, shared by both panels and reused for reconnects; connections open lazily on first use |
-| 💾 Server profiles | Saved to `~/.nuclr/net/servers.json` — passwords/passphrases are **never** written to disk, only cached in memory for the session |
+| 💾 Server profiles | Saved to `~/.nuclr/net/servers.json` — passwords/passphrases are **never** written to disk, only cached in memory for the session, and dropped immediately if the server rejects them so the next attempt prompts again |
 | 🗃️ Listing cache | Directory listings are cached per server+path to avoid re-fetching on routine navigation; Ctrl+R ("Refresh") drops the cache for the current folder, and every mutation this plugin makes (create/delete/rename/copy/move/edit) invalidates the affected folder automatically |
 | ↕️ Sortable columns | Ctrl+F3..F7/F12 sort by Name, Extension, Size or Modified, or open the sort dialog — the same convention as the local file panel |
 
