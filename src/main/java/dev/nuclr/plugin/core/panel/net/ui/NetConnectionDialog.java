@@ -29,7 +29,6 @@ import java.nio.file.Path;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
@@ -76,7 +75,6 @@ public final class NetConnectionDialog extends JDialog {
 	private final JButton browseKeyButton = new JButton("Browse…");
 	private final JPasswordField passphraseField = new JPasswordField(20);
 	private final JTextField initialPathField = new JTextField(20);
-	private final JCheckBox showPasswordBox = new JCheckBox("Show");
 
 	private Result result;
 
@@ -132,14 +130,13 @@ public final class NetConnectionDialog extends JDialog {
 		row++;
 		c.gridwidth = 1;
 
-		row = addRow(c, row, "Password:", withTrailing(passwordField, showPasswordBox));
-		showPasswordBox.addActionListener(e -> passwordField
-				.setEchoChar(showPasswordBox.isSelected() ? (char) 0 : '•'));
+		row = addRow(c, row, "Password:", withTrailing(passwordField, TextFieldSupport.showPasswordToggle(passwordField)));
 
 		row = addRow(c, row, "Key file:", withTrailing(keyPathField, browseKeyButton));
 		browseKeyButton.addActionListener(e -> browseForKey());
 
-		row = addRow(c, row, "Key passphrase:", passphraseField);
+		row = addRow(c, row, "Key passphrase:",
+				withTrailing(passphraseField, TextFieldSupport.showPasswordToggle(passphraseField)));
 		row = addRow(c, row, "Initial directory:", initialPathField);
 
 		passwordAuth.addActionListener(e -> updateAuthEnablement());

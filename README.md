@@ -7,7 +7,7 @@ An official [Nuclr Commander](https://nuclr.dev) plugin that adds a **Net** file
 | Feature | Details |
 |---|---|
 | 📡 Browsing | List remote directories via SFTP, with progressive streaming as entries arrive |
-| 🔑 Authentication | Password, or a private key with optional passphrase — OpenSSH, PEM/PKCS#8 and PuTTY PPK (v2/v3) are all auto-detected |
+| 🔑 Authentication | Password, or a private key with optional passphrase — OpenSSH, PEM/PKCS#8 and PuTTY PPK (v2/v3) are all auto-detected; every password/passphrase field has a "Show" toggle to verify what was typed |
 | 🛡️ Host verification | `known_hosts`-backed, trust-on-first-use with an explicit fingerprint confirmation; a **changed** host key is flagged as a possible attack and requires an extra confirmation |
 | 📋 Copy / Move | Both directions (local↔remote, remote↔remote, remote↔other virtual filesystems), with conflict prompts (Overwrite/Skip, with "…All" stickiness) and cancellable progress |
 | ✏️ Rename | F6 on a single item within the same folder prompts for a new name and renames it over SFTP |

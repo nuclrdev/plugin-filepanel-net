@@ -20,8 +20,10 @@ package dev.nuclr.plugin.core.panel.net.ui;
 import java.awt.event.ActionEvent;
 
 import javax.swing.AbstractAction;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JMenuItem;
+import javax.swing.JPasswordField;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
 import javax.swing.UIManager;
@@ -122,6 +124,24 @@ public final class TextFieldSupport {
 		});
 
 		field.setComponentPopupMenu(menu);
+	}
+
+	/**
+	 * Build a "Show" checkbox that toggles {@code field} between its normal
+	 * masked display and plain text, so the user can verify what they typed or
+	 * pasted before submitting. Captures the field's own echo character (rather
+	 * than assuming {@code '•'}) so it restores correctly regardless of the
+	 * look-and-feel's default.
+	 *
+	 * @param field the password field to toggle
+	 * @return a checkbox wired to {@code field}; add it next to the field
+	 */
+	public static JCheckBox showPasswordToggle(JPasswordField field) {
+		char hiddenEchoChar = field.getEchoChar();
+		var checkbox = new JCheckBox("Show");
+		checkbox.setToolTipText("Show the typed characters");
+		checkbox.addActionListener(e -> field.setEchoChar(checkbox.isSelected() ? (char) 0 : hiddenEchoChar));
+		return checkbox;
 	}
 
 	/**

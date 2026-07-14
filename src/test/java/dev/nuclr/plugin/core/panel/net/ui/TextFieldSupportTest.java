@@ -18,19 +18,21 @@
 package dev.nuclr.plugin.core.panel.net.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.text.BadLocationException;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * Headless tests for {@link TextFieldSupport#limitLength}: the document
- * filter runs regardless of whether the field is ever shown, so these run
- * without a display. {@code install}'s undo/redo and popup-menu wiring is UI
- * plumbing exercised manually via the connection dialog rather than unit
- * tested here.
+ * Headless tests for {@link TextFieldSupport#limitLength} and
+ * {@link TextFieldSupport#showPasswordToggle}: both run regardless of whether
+ * the field is ever shown, so these run without a display. {@code install}'s
+ * undo/redo and popup-menu wiring is UI plumbing exercised manually via the
+ * connection dialog rather than unit tested here.
  */
 class TextFieldSupportTest {
 
@@ -90,6 +92,38 @@ class TextFieldSupportTest {
 		field.getDocument().insertString(0, tooLong, null);
 
 		assertEquals(50, field.getText().length());
+	}
+
+	@Test
+	void toggleStartsHiddenAndRevealsOnClick() {
+		var field = new JPasswordField();
+		char defaultEchoChar = field.getEchoChar();
+		var toggle = TextFieldSupport.showPasswordToggle(field);
+
+		assertEquals(defaultEchoChar, field.getEchoChar(), "field must start masked");
+		assertTrue(defaultEchoChar != 0, "a masked field must have a non-zero echo char to begin with");
+
+		toggle.doClick();
+		assertEquals((char) 0, field.getEchoChar(), "checking the box must reveal plain text");
+
+		toggle.doClick();
+		assertEquals(defaultEchoChar, field.getEchoChar(), "unchecking must restore the original mask character");
+	}
+
+	@Test
+	void toggleRestoresTheFieldsOwnEchoCharNotAHardcodedOne() {
+		// Regression guard: the toggle must remember whatever echo char the
+		// look-and-feel actually set, not assume '•' universally.
+		var field = new JPasswordField();
+		field.setEchoChar('*');
+		var toggle = TextFieldSupport.showPasswordToggle(field);
+
+		toggle.doClick();
+		assertEquals((char) 0, field.getEchoChar());
+
+		toggle.doClick();
+		assertEquals('*', field.getEchoChar());
+		assertNotEquals('•', field.getEchoChar());
 	}
 
 }

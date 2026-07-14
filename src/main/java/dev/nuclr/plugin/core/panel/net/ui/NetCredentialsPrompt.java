@@ -89,9 +89,15 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 	private String promptSecret(String message, String title) {
 
 		var field = new JPasswordField(20);
+		TextFieldSupport.install(field);
+
+		var fieldRow = new JPanel(new BorderLayout(4, 0));
+		fieldRow.add(field, BorderLayout.CENTER);
+		fieldRow.add(TextFieldSupport.showPasswordToggle(field), BorderLayout.EAST);
+
 		var panel = new JPanel(new BorderLayout(0, 8));
 		panel.add(new JLabel(message), BorderLayout.NORTH);
-		panel.add(field, BorderLayout.CENTER);
+		panel.add(fieldRow, BorderLayout.CENTER);
 
 		// showConfirmDialog gives no hook to focus a component inside a custom
 		// message panel — its own default focuses the OK/Cancel button area
