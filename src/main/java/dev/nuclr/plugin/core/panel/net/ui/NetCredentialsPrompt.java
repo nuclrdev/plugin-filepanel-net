@@ -17,9 +17,13 @@
 */
 package dev.nuclr.plugin.core.panel.net.ui;
 
+import java.awt.BorderLayout;
 import java.net.SocketAddress;
 
+import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 
 import dev.nuclr.plugin.core.panel.net.service.Alerts;
@@ -85,21 +89,35 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 	private String promptSecret(String message, String title) {
 
 		var field = new JPasswordField(20);
-		var panel = new javax.swing.JPanel(new java.awt.BorderLayout(0, 8));
-		panel.add(new javax.swing.JLabel(message), java.awt.BorderLayout.NORTH);
-		panel.add(field, java.awt.BorderLayout.CENTER);
+		var panel = new JPanel(new BorderLayout(0, 8));
+		panel.add(new JLabel(message), BorderLayout.NORTH);
+		panel.add(field, BorderLayout.CENTER);
 
-		final int[] choice = new int[1];
+		// showConfirmDialog gives no hook to focus a component inside a custom
+		// message panel — its own default focuses the OK/Cancel button area
+		// instead. selectInitialValue() is the exact method Swing's own dialog UI
+		// calls to establish initial focus once the dialog is shown, so overriding
+		// it (rather than timing a requestFocusInWindow() call around the modal
+		// call, which races unpredictably with JOptionPane's internal focusing)
+		// is the reliable fix.
+		var optionPane = new JOptionPane(panel, JOptionPane.QUESTION_MESSAGE, JOptionPane.OK_CANCEL_OPTION) {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void selectInitialValue() {
+				field.requestFocusInWindow();
+			}
+		};
+
+		final Object[] result = new Object[1];
 		Alerts.runOnEdtAndWait(() -> {
-			// showConfirmDialog blocks until dismissed, so requesting focus AFTER it
-			// returns would be a no-op; queuing it first means it runs once the modal
-			// dialog is up and pumping the event queue, while it's still visible.
-			javax.swing.SwingUtilities.invokeLater(field::requestFocusInWindow);
-			choice[0] = JOptionPane.showConfirmDialog(null, panel, title,
-					JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+			JDialog dialog = optionPane.createDialog(null, title);
+			dialog.setVisible(true);
+			dialog.dispose();
+			result[0] = optionPane.getValue();
 		});
 
-		if (choice[0] != JOptionPane.OK_OPTION) {
+		if (!(result[0] instanceof Integer choice) || choice != JOptionPane.OK_OPTION) {
 			return null;
 		}
 		char[] value = field.getPassword();

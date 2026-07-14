@@ -59,6 +59,7 @@ import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
 import dev.nuclr.plugin.core.panel.net.tail.NetTailWindow;
 import dev.nuclr.plugin.core.panel.net.ui.NetConnectionDialog;
 import dev.nuclr.plugin.core.panel.net.ui.NetCredentialsPrompt;
+import dev.nuclr.plugin.core.panel.net.ui.NetGoToFolderDialog;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -587,6 +588,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		items.add(menu(isDirectory ? "Move" : "Rename/Move", "F6", "filepanel.move"));
 		items.add(menu("Make Folder", "F7", "filepanel.makeFolder"));
 		items.add(menu("Delete", "F8", "filepanel.delete"));
+		items.add(menu("Go to Folder", "F9", "net.goto"));
 		items.add(menu("Create file", "Shift+F4", "createFile"));
 		items.add(menu("Find", "Alt+F7", "find"));
 		addSortMenuItems(items);
@@ -705,6 +707,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			case "net.server.edit" -> handleEditServer(focusedResource, data);
 			case "net.server.remove" -> handleRemoveServer(selectedResources, focusedResource, data);
 			case "net.tail" -> handleTail(focusedResource);
+			case "net.goto" -> handleGoToFolder();
 			case "find" -> handleFind();
 			case "filepanel.view" -> handleView(focusedResource);
 			case "filepanel.edit" -> handleEdit(focusedResource);
@@ -874,6 +877,48 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 	private void openFindResults(Window owner, NetConnection connection, NetFindRequest request) {
 		new NetFindResultsWindow(owner, connection, request, this::navigateToFindResult).setVisible(true);
+	}
+
+	/**
+	 * F9: prompt for a remote path and navigate the panel there. The entered
+	 * path is not stat-checked here — a bad path surfaces through the normal
+	 * "not found" error {@link #listDirectory} already shows for any failed
+	 * navigation, so that handling isn't duplicated in the dialog.
+	 */
+	private void handleGoToFolder() {
+		if (currentConnection == null || !(currentFolder instanceof NetResource folder)) {
+			return;
+		}
+		Window owner = activeWindow();
+		var connection = currentConnection;
+		SwingUtilities.invokeLater(() -> new NetGoToFolderDialog(owner, folder.remotePath(),
+				enteredPath -> navigateToEnteredPath(connection, folder.remotePath(), enteredPath)).setVisible(true));
+	}
+
+	private void navigateToEnteredPath(NetConnection connection, String currentPath, String enteredPath) {
+		String resolved = resolveEnteredPath(currentPath, enteredPath);
+		NetResource target = directoryPlaceholder(connection.serverId(), connection, resolved, null);
+
+		var payload = new HashMap<String, Object>();
+		payload.put("resource", target);
+		context.getEventBus().emit(this, "filepanel.path.opened", payload);
+	}
+
+	/**
+	 * Resolve the F9 "Go to Folder" dialog's raw input against the panel's
+	 * current folder: an absolute entry (starting with {@code /}) is used as
+	 * given (normalized); anything else is joined onto {@code currentPath}, so
+	 * both a fresh absolute path and a relative one (a subfolder name, {@code ..},
+	 * …) work as expected.
+	 *
+	 * @param currentPath the panel's current remote folder
+	 * @param enteredPath the raw text from the dialog (already non-blank)
+	 * @return the normalized absolute path to navigate to
+	 */
+	static String resolveEnteredPath(String currentPath, String enteredPath) {
+		return enteredPath.startsWith("/")
+				? RemotePaths.normalize(enteredPath)
+				: RemotePaths.join(currentPath, enteredPath);
 	}
 
 	/** Navigate the panel to a Find result: open its parent folder and select it. */

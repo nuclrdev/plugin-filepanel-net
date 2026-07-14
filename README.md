@@ -12,6 +12,7 @@ An official [Nuclr Commander](https://nuclr.dev) plugin that adds a **Net** file
 | 📋 Copy / Move | Both directions (local↔remote, remote↔remote, remote↔other virtual filesystems), with conflict prompts (Overwrite/Skip, with "…All" stickiness) and cancellable progress |
 | ✏️ Rename | F6 on a single item within the same folder prompts for a new name and renames it over SFTP |
 | 📁 Make Folder / Create File | F7 / Shift+F4 create a new remote directory or empty file |
+| 📂 Go to Folder | F9 opens a dialog pre-filled with the current path; accepts an absolute (`/var/log`) or relative (`..`, `subdir`) remote path and navigates there |
 | 🗑️ Delete | F8 recursively deletes files/folders over SFTP (always permanent — there is no remote trash) |
 | 🔍 Find | Alt+F7 filename search: remote `find -iname`/`-name` streamed over an exec channel, falling back to a recursive SFTP walk (used automatically for regex searches, or when `find` is unavailable) |
 | 📜 Tail -F | Live-follow any remote file (`tail -F`) in its own window, with automatic reconnect on a dropped session |
@@ -43,6 +44,7 @@ Remote-folder view:
 | `F6` | Move / Rename |
 | `F7` | Make Folder |
 | `F8` | Delete |
+| `F9` | Go to Folder (type or paste an absolute or relative remote path) |
 | `Shift+F4` | Create empty file |
 | `Alt+F7` | Find |
 | `Ctrl+R` | Refresh (clears the cached listing for the current folder) |
@@ -115,7 +117,7 @@ src/main/java/dev/nuclr/plugin/core/panel/net/
 ├── service/                    copy/move/delete/mkdir/edit engines and shared dialog helpers
 ├── ssh/                        SSH session, SFTP/SCP access, server profiles, key loading, host-key gate
 ├── tail/                       tail -F viewer window
-└── ui/                         connection dialog, credential/host-key prompts
+└── ui/                         connection/go-to-folder dialogs, credential/host-key prompts, shared text-field editing (undo/redo, cut/copy/paste/select-all with icons)
 ```
 
 ## 📚 Dependencies
