@@ -27,6 +27,7 @@ import java.util.List;
 
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.channel.ChannelExec;
+import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.config.keys.FilePasswordProvider;
@@ -292,6 +293,23 @@ public final class NetConnection implements Closeable {
 	public synchronized ChannelExec execChannel(String command) throws IOException {
 		ensureOpen();
 		return session.createExecChannel(command);
+	}
+
+	/**
+	 * Open a raw interactive shell channel on the shared session, for the
+	 * commander's embedded console (Ctrl+O). The caller owns the channel (pty
+	 * setup, stream wiring, open, close); see {@code NetTerminalSession}.
+	 *
+	 * <p>The channel rides on the same {@link ClientSession} as the SFTP mount,
+	 * so it costs no extra connection and no second authentication — and closing
+	 * it must never close that session, which the panel is still browsing with.
+	 *
+	 * @return the unopened shell channel
+	 * @throws IOException if the connection cannot be (re)opened
+	 */
+	public synchronized ChannelShell shellChannel() throws IOException {
+		ensureOpen();
+		return session.createShellChannel();
 	}
 
 	/**

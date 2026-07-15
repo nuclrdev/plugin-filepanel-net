@@ -41,6 +41,7 @@ import dev.nuclr.platform.plugin.NuclrMenuResource;
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
+import dev.nuclr.platform.plugin.NuclrTerminalSession;
 import dev.nuclr.plugin.core.panel.net.find.NetFindDialog;
 import dev.nuclr.plugin.core.panel.net.find.NetFindRequest;
 import dev.nuclr.plugin.core.panel.net.find.NetFindResultsWindow;
@@ -53,6 +54,7 @@ import dev.nuclr.plugin.core.panel.net.service.NetMoveService;
 import dev.nuclr.plugin.core.panel.net.ssh.ConnectionRegistry;
 import dev.nuclr.plugin.core.panel.net.ssh.HostKeyGate;
 import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.ssh.NetTerminalSession;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
@@ -101,6 +103,13 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	/** Mirrors the generic file-panel plugin protocol used by filepanel-fs/filepanel-zip. */
 	private static final String AcceptCopy = "accept.copy";
 	private static final String AcceptMove = "accept.move";
+
+	/**
+	 * Mirrors the commander's {@code Events.FilePanelNavigateToPath} (that class is not on the SDK
+	 * classpath, so the string is duplicated here). The commander dispatches it after an embedded
+	 * console closes, asking the plugin to resolve the shell's final directory into a resource.
+	 */
+	private static final String NavigateToPath = "filepanel.navigate.to.path";
 
 	private final String uuid = java.util.UUID.randomUUID().toString();
 
@@ -506,6 +515,98 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	}
 
 	// =========================================================================
+	// Embedded console (Ctrl+O)
+	// =========================================================================
+
+	/**
+	 * Give the commander a shell <b>on the server the panel is browsing</b>, so Ctrl+O lands the
+	 * user where they already are instead of on their own machine. The shell is a channel on the
+	 * SSH session this panel is already listing directories over — no new connection, no second
+	 * password prompt — and it starts in the panel's current remote folder.
+	 *
+	 * <p>At the server list there is no server to shell into, so this returns {@code null} and the
+	 * commander opens its usual local shell. That is the right answer there: the {@code Net} root is
+	 * a list of profiles, not a place.
+	 */
+	@Override
+	public NuclrTerminalSession openTerminal(NuclrResource cwd, int columns, int rows) throws IOException {
+
+		// The Net root is a list of server profiles, not a place: let the commander open its usual
+		// local shell there.
+		if (cwd == null || NetVirtualResource.kindOf(cwd) != null) {
+			return null;
+		}
+
+		// Resolve the server from the entry's own recorded id, NOT from a live filesystem lookup.
+		// serverIdFor(fileSystem) only matches while the SSH session is open, so the instant the
+		// session drops it returns null -- and the commander reads a null session as "open a LOCAL
+		// shell", silently landing the user on their own machine while the panel still shows the
+		// server. A NetResource carries its server id for exactly this reason (it outlives a
+		// reconnect that swapped the filesystem instance), so a dropped session here just means the
+		// shell channel reconnects transparently below rather than falling back to local.
+		String serverId;
+		String remoteDir;
+		if (cwd instanceof NetResource resource) {
+			serverId = resource.serverId();
+			remoteDir = resource.remotePath();
+		} else {
+			Path path = cwd.getPath();
+			serverId = path != null ? ConnectionRegistry.serverIdFor(path.getFileSystem()) : null;
+			remoteDir = path != null ? RemotePaths.normalize(path.toString().replace('\\', '/')) : "/";
+		}
+
+		NetConnection connection = serverId != null && !serverId.isBlank()
+				? ConnectionRegistry.get(serverId)
+				: null;
+		if (connection == null) {
+			// We are showing a remote folder but hold no connection for its server (the profile was
+			// removed mid-browse, say). Refuse loudly rather than fall through to a local shell.
+			Alerts.showError(context, "Console",
+					"No open connection for this server. Reopen it from the Net list.");
+			throw new IOException("No open connection for server " + serverId);
+		}
+
+		try {
+			// NetTerminalSession.open -> shellChannel() -> ensureOpen() reconnects a dropped session.
+			return NetTerminalSession.open(connection, remoteDir, columns, rows);
+		} catch (IOException e) {
+			// Tell the user here rather than letting the commander quietly fall back to a local
+			// shell: they asked for a console on the server, and a local one would be a silent
+			// bait-and-switch.
+			log.warn("Could not open a shell on {}: {}", connection.config().address(), e.getMessage(), e);
+			Alerts.showError(context, "Console", "<html>Could not open a shell on <b>"
+					+ connection.config().address() + "</b><br/>" + e.getMessage() + "</html>");
+			throw e;
+		}
+	}
+
+	/**
+	 * Follow the console's shell: after an embedded shell (Ctrl+O) closes, move the panel to the
+	 * directory it ended in. The commander passes that directory as {@code data.get("path")} — the
+	 * shell's own terminal title, which {@link NetTerminalSession} makes it report — and reads the
+	 * resolved resource back from {@code data.get("result.navigate.resource")}.
+	 *
+	 * <p>We navigate <em>only</em> when the title still carries {@link NetTerminalSession#CWD_TITLE_PREFIX}:
+	 * that tag is proof the shell's own cwd reporting set it. A title without the tag is a shell we
+	 * could not instrument (dash) or one that writes its own decorated title, and following that
+	 * would send the panel to a path that isn't one — so we leave it where it is. Runs on the EDT and
+	 * does no network I/O: {@link #directoryPlaceholder} builds the target entry without a round trip
+	 * (the same way F9 "Go to Folder" does), and the commander lists it asynchronously afterwards.
+	 */
+	private void handleNavigateToPath(Map<String, Object> data) {
+
+		if (currentConnection == null || !(data.get("path") instanceof String reported) || reported.isBlank()) {
+			return;
+		}
+		if (!reported.startsWith(NetTerminalSession.CWD_TITLE_PREFIX)) {
+			return;
+		}
+		String remotePath = RemotePaths.normalize(reported.substring(NetTerminalSession.CWD_TITLE_PREFIX.length()));
+		NetResource target = directoryPlaceholder(currentConnection.serverId(), currentConnection, remotePath, null);
+		data.put("result.navigate.resource", target);
+	}
+
+	// =========================================================================
 	// Descendant walk (e.g. quick folder-size)
 	// =========================================================================
 
@@ -719,6 +820,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			case "filepanel.move" -> bridgeMove(other, selectedResources, focusedResource, data, callback);
 			case AcceptCopy -> acceptCopy(selectedResources, focusedResource, data);
 			case AcceptMove -> acceptMove(selectedResources, focusedResource, data);
+			case NavigateToPath -> handleNavigateToPath(data);
 			case "refresh.panel" -> invalidateCurrentFolderCache();
 			default -> {
 				// Unknown action: nothing to do.
