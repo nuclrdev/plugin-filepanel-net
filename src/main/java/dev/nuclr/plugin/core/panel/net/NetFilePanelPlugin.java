@@ -20,6 +20,8 @@ package dev.nuclr.plugin.core.panel.net;
 import java.awt.KeyboardFocusManager;
 import java.awt.Window;
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -631,11 +633,15 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	private void walkOneServer(NetConnection connection, String serverId, String dirPath,
 			Consumer<NuclrResource> visitor, AtomicBoolean cancelled, boolean recursive) throws IOException {
 
+		if (shouldStop(cancelled)) {
+			return;
+		}
+
 		var subdirs = new ArrayList<String>();
 
 		try (SftpClient sftp = connection.sftp()) {
 			for (SftpClient.DirEntry entry : sftp.readDir(dirPath)) {
-				if (isCancelled(cancelled)) {
+				if (shouldStop(cancelled)) {
 					return;
 				}
 				String name = entry.getFilename();
@@ -651,10 +657,20 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 					subdirs.add(childPath);
 				}
 			}
+		} catch (UncheckedIOException e) {
+			// The commander cancels a folder-size scan by interrupting this thread (see its
+			// FolderQuickViewPanel), which the blocked SFTP read surfaces as an UncheckedIOException
+			// wrapping InterruptedIOException. Cancellation is a clean stop, not an error: return
+			// quietly so it neither escapes this virtual thread as an uncaught exception nor gets
+			// logged as a failed scan. Only a genuine transport fault is worth surfacing.
+			if (shouldStop(cancelled) || isInterruption(e)) {
+				return;
+			}
+			throw unwrap(e);
 		}
 
 		for (String subdir : subdirs) {
-			if (isCancelled(cancelled)) {
+			if (shouldStop(cancelled)) {
 				return;
 			}
 			try {
@@ -663,6 +679,21 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 				log.debug("Skipping unreadable remote directory {}: {}", subdir, e.getMessage());
 			}
 		}
+	}
+
+	/** Stop the descendant walk when the commander cancels it — by the flag or by interrupting the thread. */
+	private static boolean shouldStop(AtomicBoolean cancelled) {
+		return isCancelled(cancelled) || Thread.currentThread().isInterrupted();
+	}
+
+	/** Whether an {@link UncheckedIOException} from an SFTP read was caused by this thread's interruption. */
+	private static boolean isInterruption(UncheckedIOException e) {
+		return e.getCause() instanceof InterruptedIOException || Thread.currentThread().isInterrupted();
+	}
+
+	/** Surface the real I/O fault under an {@link UncheckedIOException} as the checked exception callers expect. */
+	private static IOException unwrap(UncheckedIOException e) {
+		return e.getCause() != null ? e.getCause() : new IOException(e.getMessage(), e);
 	}
 
 	// =========================================================================
