@@ -16,6 +16,7 @@ An official [Nuclr Commander](https://nuclr.dev) plugin that adds a **Net** file
 | 🗑️ Delete | F8 recursively deletes files/folders over SFTP (always permanent — there is no remote trash) |
 | 🔍 Find | Alt+F7 filename search: remote `find -iname`/`-name` streamed over an exec channel, falling back to a recursive SFTP walk (used automatically for regex searches, or when `find` is unavailable) |
 | 📜 Tail -F | Live-follow any remote file (`tail -F`) in its own window, with automatic reconnect on a dropped session |
+| 🖥️ Remote shell | `Ctrl+O` opens the commander's embedded console on an SSH shell channel of the *same* session — no second connection, no second authentication — starting in the folder the panel is showing. The shell reports its working directory through the terminal title, so `cd`-ing in the console moves the panel with it |
 | 📝 Text / hex editing | F4 downloads to a local temp copy, opens the commander's usual editor picker (text or hex — whichever supports a plain file), watches the copy, detects remote changes made while you edited, and uploads via a hidden temp sibling + atomic SFTP rename |
 | 👁️ View / Quick View | F3 and Ctrl+Q both work directly against the mounted SFTP path — no download needed, since the SFTP filesystem is a real `java.nio.file.FileSystem` |
 | 🔌 Shared sessions | One SSH connection per server, shared by both panels and reused for reconnects; connections open lazily on first use |
@@ -47,6 +48,7 @@ Remote-folder view:
 | `F9` | Go to Folder (type or paste an absolute or relative remote path) |
 | `Shift+F4` | Create empty file |
 | `Alt+F7` | Find |
+| `Ctrl+O` | Open the embedded console on a remote shell in the current folder |
 | `Ctrl+R` | Refresh (clears the cached listing for the current folder) |
 | `Ctrl+F3` / `Ctrl+F4` / `Ctrl+F5` / `Ctrl+F6` | Sort by Name / Extension / Modified / Size |
 | `Ctrl+F7` | Unsort |
@@ -103,6 +105,7 @@ Nuclr Commander verifies the RSA-SHA256 signature against `nuclr-cert.pem` on lo
 - **`NetTransferEngine`** copies files into a remote directory: local sources upload via SCP (fast, matches the task's "SCP for transfers" requirement); sources on another virtual filesystem (a different server, an archive mount, …) fall back to a generic stream copy, since SCP is a single-host protocol.
 - **`NetFindService`** streams `find -print0` output from an exec channel for glob searches, or walks the tree over SFTP (used for regex searches, and as the fallback when the remote `find` is missing or fails outright).
 - **`NetEditService`** downloads the remote file via SCP, hands a `mainpanel.edit` event pointing at the local temp copy to the host (which shows the usual text/hex editor chooser), and polls the temp copy on a background thread. On a save it re-stats the remote file; if it changed since download/last-upload, the user is asked before overwriting. Otherwise it uploads to a hidden temp sibling (`.name.nuclr-<token>.tmp`) via SCP and renames it over the target with SFTP's overwriting rename (falling back to delete-then-rename if the server rejects that).
+- **`NetTerminalSession`** implements the SDK's `NuclrTerminalSession` over a `ChannelShell` on the already-open `NetConnection`, so `Ctrl+O` costs neither a new TCP connection nor a second authentication. Closing it closes only the channel, leaving the shared session up for SFTP/SCP. The shell is made to publish its working directory in the terminal title (`CWD_TITLE_PREFIX`); the panel follows that title so the console and the listing stay on the same folder.
 - **`NetDirectoryCache`** caches each folder's listing (per server id + remote path) so repeat navigation doesn't re-run SFTP `readDir`. It's invalidated automatically whenever this plugin performs a write against the cached folder (mkdir, create file, delete, rename, copy/move destination, or a completed F4 upload) and by the user's explicit Ctrl+R; changes made outside the plugin's knowledge (another SSH client, a cron job) are only picked up on that explicit refresh.
 - **SCP path safety** — Apache MINA's `ScpClient` builds its `scp -t`/`scp -f` exec command by concatenating the remote path into the command string with **no shell quoting**, and the same string is also used verbatim as the literal filename recorded in the SCP protocol stream, so it can't simply be quoted after the fact either. A path with spaces, parentheses or other shell-significant characters breaks the remote invocation outright (surfacing as `EOFException: readAck - EOF before ACK`). `ShellEscape.isSafeForUnquotedScp` checks the target path before every SCP upload/download (copy-into-Net, F4 edit download/upload) and falls back to a plain SFTP read/write for anything that isn't plain ASCII-ish — slower, but always correct.
 
@@ -115,7 +118,8 @@ src/main/java/dev/nuclr/plugin/core/panel/net/
 ├── NetVirtualResource.java     the "Net" root and server-list entries (path-less)
 ├── find/                       Alt+F7 Find: remote find + SFTP-walk fallback, dialog, results window
 ├── service/                    copy/move/delete/mkdir/edit engines and shared dialog helpers
-├── ssh/                        SSH session, SFTP/SCP access, server profiles, key loading, host-key gate
+├── NetDirectoryCache.java      per-server+path listing cache
+├── ssh/                        SSH session, SFTP/SCP access, remote shell channel, server profiles, key loading, host-key gate
 ├── tail/                       tail -F viewer window
 └── ui/                         connection/go-to-folder dialogs, credential/host-key prompts, shared text-field editing (undo/redo, cut/copy/paste/select-all with icons)
 ```
@@ -124,7 +128,7 @@ src/main/java/dev/nuclr/plugin/core/panel/net/
 
 | Library | Version | Purpose |
 |---|---|---|
-| `dev.nuclr:platform-sdk` | `3.0.2` | Nuclr platform interfaces |
+| `dev.nuclr:platform-sdk` | `3.0.3` | Nuclr platform interfaces |
 | `sshd-sftp` | `2.12.1` | Apache MINA SSHD — SFTP client/filesystem |
 | `sshd-scp` | `2.12.1` | Apache MINA SSHD — SCP transfers |
 | `sshd-putty` | `2.12.1` | Apache MINA SSHD — PuTTY PPK key parsing |
