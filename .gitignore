@@ -18,3 +18,4 @@ buildNumber.properties
 /.settings
 deploy.bat
 c.bat
+.factorypath
