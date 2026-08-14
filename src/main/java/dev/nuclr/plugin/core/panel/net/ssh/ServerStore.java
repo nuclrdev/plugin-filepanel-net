@@ -27,8 +27,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -99,7 +100,7 @@ public class ServerStore {
 			var configs = new ArrayList<>(byId.values());
 			configs.sort(Comparator.comparing(ServerConfig::displayName, String.CASE_INSENSITIVE_ORDER));
 			return configs;
-		} catch (IOException e) {
+		} catch (JacksonException e) {
 			log.warn("Cannot read Net server list [{}]: {}", file, e.getMessage());
 			return List.of();
 		}

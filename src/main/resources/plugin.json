@@ -1,16 +1,22 @@
 {
-	"schemaVersion": 1,
-	"name": "Net Remote Panel",
-	"id": "dev.nuclr.plugin.core.panel.net",
-	"version": "1.0.0",
-	"description": "Browse and manage remote servers over SSH: SFTP filesystem operations, SCP transfers, remote find, tail -F and remote editing.",
-	"author": "Nuclr Development Team",
-	"license": "Apache-2.0",
-	"website": "https://nuclr.dev",
-	"pageUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
-	"docUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
-	"type": "Official",
-	"filePanelProviders": [
-		"dev.nuclr.plugin.core.panel.net.NetFilePanelPlugin"
+  "schemaVersion": 1,
+  "version": "${project.version}",
+  "platformSdkVersion": "4.0.0",
+	"plugins": [
+		{
+			"class": "dev.nuclr.plugin.core.panel.net.NetFilePanelPlugin",
+			"type": "FilePanel",
+			"id": "dev.nuclr.plugin.core.panel.net",
+			"name": "Net Remote Panel",
+			"version": "${project.version}",
+			"description": "Browse and manage remote servers over SSH: SFTP filesystem operations, SCP transfers, remote find, tail -F and remote editing.",
+			"author": "Nuclr Development Team",
+			"license": "Apache-2.0",
+			"website": "https://nuclr.dev",
+			"pageUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
+			"docUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
+			"developer": "Official",
+			"singleton": false
+		}
 	]
 }

@@ -44,6 +44,7 @@ import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
 import dev.nuclr.platform.plugin.NuclrTerminalSession;
+import dev.nuclr.platform.plugin.QuickViewNuclrPlugin;
 import dev.nuclr.plugin.core.panel.net.find.NetFindDialog;
 import dev.nuclr.plugin.core.panel.net.find.NetFindRequest;
 import dev.nuclr.plugin.core.panel.net.find.NetFindResultsWindow;
@@ -92,15 +93,6 @@ import lombok.extern.slf4j.Slf4j;
 public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 	public static final String PluginId = "dev.nuclr.plugin.core.panel.net";
-	private static final String PluginName = "Net Remote Panel";
-	private static final String PluginVersion = loadVersion();
-	private static final String PluginDescription =
-			"Browse and manage remote servers over SSH: SFTP filesystem operations, SCP transfers, remote find, tail -F and remote editing.";
-	private static final String PluginAuthor = "Nuclr Development Team";
-	private static final String PluginLicense = "Apache-2.0";
-	private static final String PluginWebsite = "https://nuclr.dev";
-	private static final String PluginPageUrl = "https://nuclr.dev/plugins/core/filepanel-net.html";
-	private static final String PluginDocUrl = PluginPageUrl;
 
 	/** Mirrors the generic file-panel plugin protocol used by filepanel-fs/filepanel-zip. */
 	private static final String AcceptCopy = "accept.copy";
@@ -155,12 +147,6 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		log.info("Net panel plugin unloaded");
 	}
 
-	@Override
-	public boolean singleton() {
-		// Each panel side keeps its own current folder; connections are shared
-		// separately through the process-wide ConnectionRegistry.
-		return false;
-	}
 
 	@Override
 	public String uuid() {
@@ -176,10 +162,6 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		return currentFolder;
 	}
 
-	@Override
-	public Developer developer() {
-		return Developer.Official;
-	}
 
 	@Override
 	public boolean onFocusGained() {
@@ -198,68 +180,6 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	}
 
 	// =========================================================================
-	// Metadata
-	// =========================================================================
-
-	@Override
-	public String id() {
-		return PluginId;
-	}
-
-	@Override
-	public String name() {
-		return PluginName;
-	}
-
-	@Override
-	public String version() {
-		return PluginVersion;
-	}
-
-	private static String loadVersion() {
-		try (var stream = NetFilePanelPlugin.class.getResourceAsStream("/plugin.properties")) {
-			if (stream == null) {
-				return "unknown";
-			}
-			var props = new java.util.Properties();
-			props.load(stream);
-			return props.getProperty("version", "unknown");
-		} catch (IOException e) {
-			return "unknown";
-		}
-	}
-
-	@Override
-	public String description() {
-		return PluginDescription;
-	}
-
-	@Override
-	public String author() {
-		return PluginAuthor;
-	}
-
-	@Override
-	public String license() {
-		return PluginLicense;
-	}
-
-	@Override
-	public String website() {
-		return PluginWebsite;
-	}
-
-	@Override
-	public String pageUrl() {
-		return PluginPageUrl;
-	}
-
-	@Override
-	public String docUrl() {
-		return PluginDocUrl;
-	}
-
-	// =========================================================================
 	// Drive selector (Alt+F1 / Alt+F2)
 	// =========================================================================
 
@@ -269,7 +189,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		var item = new MenuItem();
 		item.setText("Net");
 		item.setPath(NetVirtualResource.root());
-		item.setUuid(id() + ":root");
+		item.setUuid(PluginId + ":root");
 		holder.setMenuItems(List.of(item));
 		holder.setTitle("Net");
 		return holder;
@@ -882,7 +802,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 		if (other == null || other.uuid().equals(this.uuid())
-				|| other.is(BaseNuclrPlugin.Type.QuickView)) {
+				|| other instanceof QuickViewNuclrPlugin) {
 			this.act(null, acceptAction, selectedResources, focusedResource, data, callback);
 			return;
 		}
@@ -896,7 +816,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		if (currentConnection == null) {
 			return;
 		}
-		if (other == null || other.uuid().equals(this.uuid()) || other.is(BaseNuclrPlugin.Type.QuickView)) {
+		if (other == null || other.uuid().equals(this.uuid()) || other instanceof QuickViewNuclrPlugin) {
 			if (new NetMoveService().renameInPlace(focusedResource, context)) {
 				invalidateCurrentFolderCache();
 				data.put("result.refresh", true);
@@ -1208,5 +1128,6 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	private static Path knownHostsFile() {
 		return Path.of(System.getProperty("user.home"), ".nuclr", "net", "known_hosts");
 	}
+
 
 }
