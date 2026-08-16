@@ -13,8 +13,8 @@
 			"author": "Nuclr Development Team",
 			"license": "Apache-2.0",
 			"website": "https://nuclr.dev",
-			"pageUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
-			"docUrl": "https://nuclr.dev/plugins/core/filepanel-net.html",
+			"pageUrl": "https://github.com/nuclrdev/plugin-filepanel-net",
+			"docUrl": "https://github.com/nuclrdev/plugin-filepanel-net",
 			"developer": "Official",
 			"singleton": false
 		}
