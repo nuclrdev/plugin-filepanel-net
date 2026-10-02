@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "actions": [
+    {
+      "id": "net.servers.list",
+      "title": "List saved servers",
+      "summary": "Lists the SSH servers saved in the Net panel, and whether each is connected. Never returns passwords or keys.",
+      "doc": "actions/net.servers.list.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": { "type": "object", "properties": {} },
+      "output": {
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "description": "Saved servers, sorted by name",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id":        { "type": "string", "description": "Stable id; always unambiguous as a 'server' argument" },
+                "name":      { "type": "string", "description": "Display name; also accepted as a 'server' argument" },
+                "host":      { "type": "string" },
+                "port":      { "type": "integer" },
+                "username":  { "type": "string" },
+                "auth":      { "type": "string", "enum": ["password", "key"] },
+                "connected": { "type": "boolean", "description": "Whether a session is open right now" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "net.list",
+      "title": "List a folder on a server",
+      "summary": "Lists the entries of a remote folder over SFTP: name, type, size, modification time and permissions.",
+      "doc": "actions/net.list.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["server"],
+        "properties": {
+          "server": { "type": "string", "description": "Saved server id or name (see net.servers.list)" },
+          "path":   { "type": "string", "description": "Folder to list. Absolute, or relative to the login folder; '~' or omitted means the login folder" },
+          "limit":  { "type": "integer", "minimum": 1, "maximum": 5000, "default": 500, "description": "Most entries to return, by name order" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "path":    { "type": "string", "description": "The absolute folder path listed" },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name":        { "type": "string" },
+                "type":        { "type": "string", "enum": ["file", "directory", "symlink", "other"] },
+                "size":        { "type": "integer", "description": "Bytes" },
+                "modified":    { "type": "string", "description": "ISO-8601 instant, or null when unknown" },
+                "permissions": { "type": "string", "description": "As ls shows them, e.g. rwxr-xr-x" }
+              }
+            }
+          },
+          "total":     { "type": "integer", "description": "Entries in the folder" },
+          "truncated": { "type": "boolean", "description": "True when total exceeds limit" }
+        }
+      }
+    },
+    {
+      "id": "net.read",
+      "title": "Read a file on a server",
+      "summary": "Reads a remote file over SFTP. Text comes back as UTF-8, anything else as base64.",
+      "doc": "actions/net.read.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["server", "path"],
+        "properties": {
+          "server":   { "type": "string", "description": "Saved server id or name (see net.servers.list)" },
+          "path":     { "type": "string", "description": "File to read. Absolute, or relative to the login folder" },
+          "maxBytes": { "type": "integer", "minimum": 1, "maximum": 4194304, "default": 262144, "description": "Most bytes to read from the start of the file" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "path":      { "type": "string" },
+          "size":      { "type": "integer", "description": "The file's full size in bytes" },
+          "encoding":  { "type": "string", "enum": ["utf-8", "base64"] },
+          "content":   { "type": "string" },
+          "truncated": { "type": "boolean", "description": "True when the file is longer than what was read" }
+        }
+      }
+    },
+    {
+      "id": "net.exec",
+      "title": "Run a command on a server",
+      "summary": "Runs a shell command on a saved SSH server, without a terminal, and returns its exit code and output.",
+      "doc": "actions/net.exec.md",
+      "class": "unrestricted",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["server", "command"],
+        "properties": {
+          "server":         { "type": "string", "description": "Saved server id or name (see net.servers.list)" },
+          "command":        { "type": "string", "description": "Shell command line, run by the login shell. Must not wait for input" },
+          "cwd":            { "type": "string", "description": "Folder to run in. Absolute, or relative to the login folder; omitted means the login folder" },
+          "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600, "default": 300, "description": "The command is stopped after this long" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "exitCode":  { "type": "integer", "description": "The command's exit status; -1 when it was stopped" },
+          "stdout":    { "type": "string", "description": "Standard output; only the last 256 KB when longer" },
+          "stderr":    { "type": "string", "description": "Standard error; only the last 256 KB when longer" },
+          "timedOut":  { "type": "boolean" },
+          "truncated": { "type": "boolean", "description": "True when earlier output was left out of stdout or stderr" }
+        }
+      }
+    },
+    {
+      "id": "net.write",
+      "title": "Write a file on a server",
+      "summary": "Creates or replaces a remote file with the given content. Replacing an existing file is shown to the user as a diff for approval first.",
+      "doc": "actions/net.write.md",
+      "class": "write",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["server", "path", "content"],
+        "properties": {
+          "server":     { "type": "string", "description": "Saved server id or name (see net.servers.list)" },
+          "path":       { "type": "string", "description": "File to write. Absolute, or relative to the login folder" },
+          "content":    { "type": "string", "description": "The file's complete new content" },
+          "encoding":   { "type": "string", "enum": ["utf-8", "base64"], "default": "utf-8", "description": "How 'content' is encoded; base64 for binary files" },
+          "createDirs": { "type": "boolean", "default": false, "description": "Create missing parent folders" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "path":         { "type": "string" },
+          "bytesWritten": { "type": "integer" },
+          "created":      { "type": "boolean", "description": "True when the file did not exist before" },
+          "unchanged":    { "type": "boolean", "description": "True when the file already had exactly this content; nothing was written" }
+        }
+      }
+    },
+    {
+      "id": "net.copy",
+      "title": "Copy between servers",
+      "summary": "Copies a file or folder from one saved server to another (or within one), streaming through Commander. The content is never returned to the caller.",
+      "doc": "actions/net.copy.md",
+      "class": "write",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["fromServer", "fromPath", "toServer", "toPath"],
+        "properties": {
+          "fromServer": { "type": "string", "description": "Source server id or name" },
+          "fromPath":   { "type": "string", "description": "File or folder to copy. Absolute, or relative to the login folder" },
+          "toServer":   { "type": "string", "description": "Destination server id or name; may be the same server" },
+          "toPath":     { "type": "string", "description": "The copy's exact path: the new file's path, or the folder the source folder's contents go into" },
+          "overwrite":  { "type": "boolean", "default": false, "description": "Replace files that already exist at the destination (the user is asked first)" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "files":           { "type": "integer", "description": "Files copied" },
+          "folders":         { "type": "integer", "description": "Folders created or merged into" },
+          "bytes":           { "type": "integer" },
+          "skippedSymlinks": { "type": "integer", "description": "Symbolic links inside a folder are not copied" }
+        }
+      }
+    }
+  ]
+}

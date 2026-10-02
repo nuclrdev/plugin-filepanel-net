@@ -1,0 +1,10 @@
+# The Nuclr test server's SSH settings (added to Ubuntu's defaults).
+PermitRootLogin no
+PubkeyAuthentication yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+# Host keys come from ../.keys on the developer's machine (copied in by
+# entrypoint.sh), so a reset never changes the server's identity and the Net
+# panel never warns about a changed host key.
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key

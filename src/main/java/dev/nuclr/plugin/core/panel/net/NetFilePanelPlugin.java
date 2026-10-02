@@ -33,7 +33,6 @@ import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
 
-import org.apache.sshd.client.keyverifier.ServerKeyVerifier;
 import org.apache.sshd.sftp.client.SftpClient;
 
 import dev.nuclr.platform.plugin.BaseNuclrPlugin;
@@ -45,6 +44,7 @@ import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
 import dev.nuclr.platform.plugin.NuclrTerminalSession;
 import dev.nuclr.platform.plugin.QuickViewNuclrPlugin;
+import dev.nuclr.plugin.core.panel.net.actions.NetActions;
 import dev.nuclr.plugin.core.panel.net.find.NetFindDialog;
 import dev.nuclr.plugin.core.panel.net.find.NetFindRequest;
 import dev.nuclr.plugin.core.panel.net.find.NetFindResultsWindow;
@@ -55,7 +55,7 @@ import dev.nuclr.plugin.core.panel.net.service.NetEditService;
 import dev.nuclr.plugin.core.panel.net.service.NetMakeFolderService;
 import dev.nuclr.plugin.core.panel.net.service.NetMoveService;
 import dev.nuclr.plugin.core.panel.net.ssh.ConnectionRegistry;
-import dev.nuclr.plugin.core.panel.net.ssh.HostKeyGate;
+import dev.nuclr.plugin.core.panel.net.ssh.Connections;
 import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.NetTerminalSession;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
@@ -63,7 +63,6 @@ import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
 import dev.nuclr.plugin.core.panel.net.tail.NetTailWindow;
 import dev.nuclr.plugin.core.panel.net.ui.NetConnectionDialog;
-import dev.nuclr.plugin.core.panel.net.ui.NetCredentialsPrompt;
 import dev.nuclr.plugin.core.panel.net.ui.NetGoToFolderDialog;
 import lombok.extern.slf4j.Slf4j;
 
@@ -107,7 +106,6 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 	private final String uuid = java.util.UUID.randomUUID().toString();
 
-	private static volatile ServerKeyVerifier hostKeyVerifier;
 
 	private NuclrPluginContext context;
 	private boolean focused;
@@ -285,8 +283,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return listServerList(sink);
 		}
 
-		NetConnection connection = ConnectionRegistry.getOrCreate(serverId,
-				id -> new NetConnection(config, hostKeyVerifier(), NetCredentialsPrompt.INSTANCE));
+		NetConnection connection = Connections.forConfig(config);
 
 		try {
 			connection.ensureOpen();
@@ -754,6 +751,14 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	public void act(BaseNuclrPlugin other, String actionType, List<NuclrResource> selectedResources,
 			NuclrResource focusedResource, Map<String, Object> data, NuclrPluginCallback callback) {
 
+		// Actions declared in actions.json (agents, command palette). They need no
+		// pane, selection or open resource, so they run the same on a headless
+		// instance; see NetActions.
+		if (NetActions.handles(actionType)) {
+			NetActions.standard().run(actionType, data, callback);
+			return;
+		}
+
 		switch (actionType) {
 			case "net.server.new" -> handleNewServer(data);
 			case "net.server.edit" -> handleEditServer(focusedResource, data);
@@ -1111,22 +1116,6 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 	private static Window activeWindow() {
 		return KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
-	}
-
-	private static synchronized ServerKeyVerifier hostKeyVerifier() {
-		if (hostKeyVerifier == null) {
-			try {
-				hostKeyVerifier = HostKeyGate.create(knownHostsFile(), NetCredentialsPrompt.INSTANCE);
-			} catch (IOException e) {
-				log.error("Cannot initialize known_hosts store at {}: {}", knownHostsFile(), e.getMessage());
-				hostKeyVerifier = (session, address, serverKey) -> false; // fail safe: refuse all hosts
-			}
-		}
-		return hostKeyVerifier;
-	}
-
-	private static Path knownHostsFile() {
-		return Path.of(System.getProperty("user.home"), ".nuclr", "net", "known_hosts");
 	}
 
 

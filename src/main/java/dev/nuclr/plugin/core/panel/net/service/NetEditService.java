@@ -108,7 +108,7 @@ public final class NetEditService implements NuclrEventListener {
 	 * @param token      a uniqueness token (random hex)
 	 * @return the sibling's absolute remote path in the same directory
 	 */
-	static String uploadSiblingPath(String remotePath, String token) {
+	public static String uploadSiblingPath(String remotePath, String token) {
 		String parent = RemotePaths.parent(remotePath);
 		String name = RemotePaths.name(remotePath);
 		return RemotePaths.join(parent == null ? "/" : parent, "." + name + ".nuclr-" + token + ".tmp");

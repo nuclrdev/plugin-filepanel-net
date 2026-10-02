@@ -6,11 +6,17 @@
 
 	<groupId>dev.nuclr.plugin.core</groupId>
 	<artifactId>filepanel-net</artifactId>
-	<version>1.0.2</version>
+	<version>1.1.0</version>
 	<name>Nuclr File Panel - Net</name>
 
 	<properties>
-		<platform.sdk.version>4.0.0</platform.sdk.version>
+		<!-- Compiled against 6.1.0 for the plugin actions API (onResult, onOutput,
+		     confirm). Those methods are only called while running an action, and only
+		     a 6.1+ Commander runs actions, so the manifest keeps asking for 4.0.0:
+		     older Commanders still load the panel. Anything else from SDK 5/6 used
+		     outside action code would break that, so keep newer API inside actions/. -->
+		<platform.sdk.version>6.1.0</platform.sdk.version>
+		<platform.sdk.min.version>4.0.0</platform.sdk.min.version>
 		<maven.compiler.source>25</maven.compiler.source>
 		<maven.compiler.target>25</maven.compiler.target>
 		<jarsigner.keystorepath>C:/nuclr/key/nuclr-signing.p12</jarsigner.keystorepath>
@@ -113,8 +119,23 @@
 			<version>0.3.0</version>
 		</dependency>
 
+		<!-- Unified diffs shown when an action overwrites a remote file. -->
+		<dependency>
+			<groupId>io.github.java-diff-utils</groupId>
+			<artifactId>java-diff-utils</artifactId>
+			<version>4.15</version>
+		</dependency>
+
 		<!-- Test dependencies (JUnit 5 / Jupiter). Provided-scope deps above are
 		     also on the test classpath. -->
+		<!-- In-memory filesystem with real POSIX permissions, so tests can check file
+		     modes over SFTP even on Windows, whose filesystem has none. -->
+		<dependency>
+			<groupId>com.google.jimfs</groupId>
+			<artifactId>jimfs</artifactId>
+			<version>1.3.0</version>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter</artifactId>
