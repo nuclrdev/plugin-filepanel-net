@@ -73,6 +73,24 @@ public class ServerConfig implements Serializable {
 	}
 
 	/**
+	 * Return a copy of this profile under a fresh id, named "&lt;name&gt; (copy)"
+	 * so it is told apart from the original in the server list.
+	 *
+	 * @return the duplicated profile; this one is left untouched
+	 */
+	public ServerConfig duplicate() {
+		var copy = new ServerConfig();
+		copy.setName(displayName() + " (copy)");
+		copy.setHost(host);
+		copy.setPort(port);
+		copy.setUsername(username);
+		copy.setAuthMethod(authMethod);
+		copy.setPrivateKeyPath(privateKeyPath);
+		copy.setInitialPath(initialPath);
+		return copy;
+	}
+
+	/**
 	 * Return the label shown for this server in the panel and menus.
 	 *
 	 * @return the profile name, or {@code user@host} when no name is set

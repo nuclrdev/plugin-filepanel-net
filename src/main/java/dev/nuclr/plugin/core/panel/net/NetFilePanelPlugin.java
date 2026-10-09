@@ -624,6 +624,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 		if (currentConnection == null) {
 			items.add(menu("Edit Server", "F4", "net.server.edit"));
+			items.add(menu("Copy Server", "F5", "net.server.copy"));
 			items.add(menu("New Server", "F7", "net.server.new"));
 			items.add(menu("Remove Server", "F8", "net.server.remove"));
 			return items;
@@ -682,6 +683,8 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 							.iconKey("server-add").build(),
 					NuclrContextMenuItem.builder().label("Edit Server").actionType("net.server.edit")
 							.iconKey("edit").build(),
+					NuclrContextMenuItem.builder().label("Copy Server").actionType("net.server.copy")
+							.iconKey("copy").build(),
 					NuclrContextMenuItem.separator(),
 					NuclrContextMenuItem.builder().label("Remove Server").actionType("net.server.remove")
 							.iconKey("delete").destructive(true).build());
@@ -762,6 +765,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		switch (actionType) {
 			case "net.server.new" -> handleNewServer(data);
 			case "net.server.edit" -> handleEditServer(focusedResource, data);
+			case "net.server.copy" -> handleCopyServer(focusedResource, data);
 			case "net.server.remove" -> handleRemoveServer(selectedResources, focusedResource, data);
 			case "net.tail" -> handleTail(focusedResource);
 			case "net.goto" -> handleGoToFolder();
@@ -1049,6 +1053,31 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		ConnectionRegistry.closeAndRemove(serverId);
 		NetDirectoryCache.invalidateServer(serverId);
 
+		if (!saveProfile(result)) {
+			return;
+		}
+		data.put("result.refresh", true);
+		Alerts.confirmation(context);
+	}
+
+	/** F5 at the server list: open the focused profile's settings as a new profile under a fresh id. */
+	private void handleCopyServer(NuclrResource focusedResource, Map<String, Object> data) {
+
+		String serverId = NetVirtualResource.serverIdOf(focusedResource);
+		if (serverId == null) {
+			Alerts.showError(context, "Copy Server", "Select a server to copy.");
+			return;
+		}
+		ServerConfig existing = serverStore.byId(serverId);
+		if (existing == null) {
+			Alerts.showError(context, "Copy Server", "Server profile not found.");
+			return;
+		}
+
+		var result = NetConnectionDialog.show(activeWindow(), "Copy Server", existing.duplicate());
+		if (result == null) {
+			return;
+		}
 		if (!saveProfile(result)) {
 			return;
 		}

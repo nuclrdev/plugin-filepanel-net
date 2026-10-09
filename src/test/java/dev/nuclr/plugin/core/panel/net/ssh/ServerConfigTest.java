@@ -19,6 +19,7 @@ package dev.nuclr.plugin.core.panel.net.ssh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,38 @@ class ServerConfigTest {
 
 		config.setName("Production Box");
 		assertEquals("Production Box", config.displayName());
+	}
+
+	@Test
+	void duplicateCopiesSettingsUnderFreshId() {
+		var original = new ServerConfig();
+		original.setName("Prod");
+		original.setHost("example.com");
+		original.setPort(2222);
+		original.setUsername("alice");
+		original.setAuthMethod(ServerConfig.AuthMethod.KEY);
+		original.setPrivateKeyPath("/keys/id_ed25519");
+		original.setInitialPath("/var/log");
+
+		var copy = original.duplicate();
+
+		assertNotEquals(original.getId(), copy.getId());
+		assertEquals("Prod (copy)", copy.getName());
+		assertEquals("example.com", copy.getHost());
+		assertEquals(2222, copy.getPort());
+		assertEquals("alice", copy.getUsername());
+		assertEquals(ServerConfig.AuthMethod.KEY, copy.getAuthMethod());
+		assertEquals("/keys/id_ed25519", copy.getPrivateKeyPath());
+		assertEquals("/var/log", copy.getInitialPath());
+		assertEquals("Prod", original.getName());
+	}
+
+	@Test
+	void duplicateOfUnnamedProfileIsNamedAfterAddress() {
+		var original = new ServerConfig();
+		original.setUsername("bob");
+		original.setHost("host.example");
+		assertEquals("bob@host.example (copy)", original.duplicate().getName());
 	}
 
 	@Test
