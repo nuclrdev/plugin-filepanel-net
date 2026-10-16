@@ -4,7 +4,7 @@
     {
       "id": "net.servers.list",
       "title": "List saved servers",
-      "summary": "Lists the SSH servers saved in the Net panel, and whether each is connected. Never returns passwords or keys.",
+      "summary": "Lists the SSH servers saved in the Net panel, and whether each is connected. Never returns passwords or keys. If none is saved, ask the user to add one in Commander, under Configs → Connections.",
       "doc": "actions/net.servers.list.md",
       "class": "read",
       "exposure": ["agent", "palette"],

@@ -821,7 +821,7 @@ public final class NetActions {
 		String names = configs.stream().map(ServerConfig::displayName).collect(Collectors.joining(", "));
 		if (byName.isEmpty()) {
 			throw new ActionException("No saved server '" + reference + "'. Saved servers: "
-					+ (names.isEmpty() ? "none - add one in the Net panel first." : names + "."));
+					+ (names.isEmpty() ? "none - ask the user to add one in Commander, under Configs → Connections." : names + "."));
 		}
 		throw new ActionException("'" + reference + "' matches " + byName.size()
 				+ " saved servers; use the id from net.servers.list instead.");
