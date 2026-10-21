@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -37,8 +39,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class NetCopyService {
 
-	private static final String DialogTitle = "Copy";
-
 	/**
 	 * Copy the selection into the destination remote folder, driving the
 	 * confirmation, progress and conflict dialogs.
@@ -55,19 +55,18 @@ public class NetCopyService {
 
 		Path destination = destinationFolder != null ? destinationFolder.getPath() : null;
 		if (destination == null) {
-			Alerts.showError(context, DialogTitle, "The destination is not a remote folder.");
+			Alerts.showError(context, tr("copy.title"), tr("transfer.destination.not.remote"));
 			return false;
 		}
 
 		List<Path> sources = collectSources(selectedResources, focusedResource);
 		if (sources.isEmpty()) {
-			Alerts.showError(context, DialogTitle, "There is nothing to copy.");
+			Alerts.showError(context, tr("copy.title"), tr("copy.nothing"));
 			return false;
 		}
 
-		if (!Alerts.confirm(context, DialogTitle,
-				"<html>Copy <b>" + header(sources) + "</b> to<br/><b>" + destinationFolder.getFullPath()
-						+ "</b> ?</html>")) {
+		if (!Alerts.confirm(context, tr("copy.title"),
+				tr("copy.confirm", header(sources), destinationFolder.getFullPath()))) {
 			Alerts.cancel(context);
 			return false;
 		}
@@ -75,10 +74,10 @@ public class NetCopyService {
 		var conflictDialog = new TransferConflictDialog(context);
 		var completed = new AtomicBoolean(false);
 
-		NetProgressDialog.run(DialogTitle, callback -> {
+		NetProgressDialog.run(tr("copy.title"), callback -> {
 			var engine = new NetTransferEngine(connection, callback, conflictDialog::resolve, (source, e) -> {
-				Alerts.showError(context, DialogTitle,
-						"<html>Could not copy <b>" + source + "</b><br/>" + e.getMessage() + "</html>");
+				Alerts.showError(context, tr("copy.title"),
+						tr("copy.failed", String.valueOf(source), e.getMessage()));
 				return true; // skip and continue
 			});
 			completed.set(engine.copy(sources, destination));
@@ -118,7 +117,7 @@ public class NetCopyService {
 			Path name = sources.get(0).getFileName();
 			return name != null ? name.toString() : sources.get(0).toString();
 		}
-		return sources.size() + " items";
+		return tr("transfer.items", String.valueOf(sources.size()));
 	}
 
 	/**

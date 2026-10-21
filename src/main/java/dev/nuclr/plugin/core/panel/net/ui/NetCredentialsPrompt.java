@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.ui;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.net.SocketAddress;
 
@@ -59,8 +61,9 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 		ConnectionRegistry.dropPassword(config.getId());
 
 		String entered = promptSecret(
-				(retryIndex == 0 ? "" : "Incorrect password. ") + "Password for " + config.address() + ":",
-				"Password");
+				retryIndex == 0 ? tr("credentials.password.prompt", config.address())
+						: tr("credentials.password.retry", config.address()),
+				tr("credentials.password.title"));
 		if (entered != null) {
 			ConnectionRegistry.cachePassword(config.getId(), entered);
 		}
@@ -77,9 +80,9 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 		ConnectionRegistry.dropPassphrase(config.getId());
 
 		String entered = promptSecret(
-				(retryIndex == 0 ? "" : "Incorrect passphrase. ") + "Passphrase for key " + config.getPrivateKeyPath()
-						+ ":",
-				"Private Key Passphrase");
+				retryIndex == 0 ? tr("credentials.passphrase.prompt", config.getPrivateKeyPath())
+						: tr("credentials.passphrase.retry", config.getPrivateKeyPath()),
+				tr("credentials.passphrase.title"));
 		if (entered != null) {
 			ConnectionRegistry.cachePassphrase(config.getId(), entered);
 		}
@@ -134,10 +137,8 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 	@Override
 	public boolean acceptUnknown(SocketAddress address, String keyType, String fingerprint) {
 		return confirmYesNo(
-				"<html>The authenticity of host <b>" + address + "</b> can't be established.<br/>"
-						+ keyType + " key fingerprint:<br/><b>" + fingerprint + "</b><br/><br/>"
-						+ "Are you sure you want to continue connecting?</html>",
-				"Unknown Host",
+				tr("hostkey.unknown.message", String.valueOf(address), keyType, fingerprint),
+				tr("hostkey.unknown.title"),
 				JOptionPane.WARNING_MESSAGE);
 	}
 
@@ -145,15 +146,9 @@ public final class NetCredentialsPrompt implements NetConnection.CredentialsProv
 	public boolean acceptChanged(SocketAddress address, String recordedFingerprint, String presentedKeyType,
 			String presentedFingerprint) {
 		return confirmYesNo(
-				"<html><b><font color='red'>WARNING: HOST KEY HAS CHANGED!</font></b><br/><br/>"
-						+ "The " + presentedKeyType + " key fingerprint presented by <b>" + address
-						+ "</b> is:<br/><b>" + presentedFingerprint + "</b><br/><br/>"
-						+ "The fingerprint previously recorded was:<br/><b>" + recordedFingerprint + "</b><br/><br/>"
-						+ "This <b>could</b> mean someone is intercepting your connection (a man-in-the-middle attack), "
-						+ "or it could mean the server's key was legitimately regenerated.<br/><br/>"
-						+ "Only continue if you can verify the new fingerprint through another channel.<br/>"
-						+ "Continue connecting and update the stored key?</html>",
-				"HOST KEY CHANGED",
+				tr("hostkey.changed.message", presentedKeyType, String.valueOf(address), presentedFingerprint,
+						recordedFingerprint),
+				tr("hostkey.changed.title"),
 				JOptionPane.ERROR_MESSAGE);
 	}
 

@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.util.List;
 
 import dev.nuclr.platform.plugin.NuclrResource;
@@ -82,7 +84,7 @@ public final class NetVirtualResource extends NuclrResource {
 	public static NetVirtualResource parentToServerList() {
 		var resource = new NetVirtualResource("..", "net:root");
 		resource.getMetadata().put(KIND, KIND_ROOT);
-		resource.getMetadata().put("Size", "Up");
+		resource.getMetadata().put("Size", tr("resource.size.up"));
 		return resource;
 	}
 
@@ -99,7 +101,7 @@ public final class NetVirtualResource extends NuclrResource {
 		resource.getMetadata().put(KEY_SERVER_ID, config.getId());
 		resource.getMetadata().put("Address", config.getHost() + ":" + config.getPort());
 		resource.getMetadata().put("User", config.getUsername());
-		resource.getMetadata().put("Status", connected ? "Connected" : "");
+		resource.getMetadata().put("Status", connected ? tr("server.status.connected") : "");
 		return resource;
 	}
 

@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.OpenOption;
@@ -113,7 +115,7 @@ public final class NetResource extends NuclrResource {
 
 		this.getMetadata().put("Name", entryName);
 		this.getMetadata().put("Extension", directory ? "" : extensionOf(entryName));
-		this.getMetadata().put("Size", directory ? (entryName.equals("..") ? "Up" : "") : humanReadableSize(size));
+		this.getMetadata().put("Size", directory ? (entryName.equals("..") ? tr("resource.size.up") : "") : humanReadableSize(size));
 		this.getMetadata().put("Type", typeLabel(directory, link));
 		this.getMetadata().put("Modified", modified == null ? "-" : formatter.format(modified));
 		this.getMetadata().put("Permissions", attrs != null ? permissionsString(attrs.getPermissions()) : "-");
@@ -129,7 +131,7 @@ public final class NetResource extends NuclrResource {
 		this.name = name;
 		this.getMetadata().put("Name", name);
 		if (name.equals("..")) {
-			this.getMetadata().put("Size", "Up");
+			this.getMetadata().put("Size", tr("resource.size.up"));
 		}
 	}
 
@@ -175,9 +177,9 @@ public final class NetResource extends NuclrResource {
 
 	private static String typeLabel(boolean directory, boolean link) {
 		if (directory) {
-			return link ? "Folder link" : "Folder";
+			return link ? tr("resource.type.folder.link") : tr("resource.type.folder");
 		}
-		return link ? "File link" : "File";
+		return link ? tr("resource.type.file.link") : tr("resource.type.file");
 	}
 
 	private static LocalDateTime toLocal(FileTime time) {

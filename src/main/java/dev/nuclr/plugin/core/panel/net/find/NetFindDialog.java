@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.find;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
@@ -46,9 +48,9 @@ public final class NetFindDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
 
 	private final JTextField patternField = new JTextField("*", 24);
-	private final JRadioButton globButton = new JRadioButton("Glob (* ?)", true);
-	private final JRadioButton regexButton = new JRadioButton("Regular expression");
-	private final JCheckBox caseSensitiveBox = new JCheckBox("Case sensitive");
+	private final JRadioButton globButton = new JRadioButton(tr("find.glob"), true);
+	private final JRadioButton regexButton = new JRadioButton(tr("find.regex"));
+	private final JCheckBox caseSensitiveBox = new JCheckBox(tr("find.case.sensitive"));
 
 	/**
 	 * Build and lay out the dialog.
@@ -58,7 +60,7 @@ public final class NetFindDialog extends JDialog {
 	 * @param onSubmit invoked with the built request when the user clicks Find
 	 */
 	public NetFindDialog(Window owner, String rootPath, Consumer<NetFindRequest> onSubmit) {
-		super(owner, "Find File", ModalityType.MODELESS);
+		super(owner, tr("find.title"), ModalityType.MODELESS);
 
 		var group = new ButtonGroup();
 		group.add(globButton);
@@ -72,7 +74,7 @@ public final class NetFindDialog extends JDialog {
 
 		c.gridx = 0;
 		c.gridy = 0;
-		form.add(new JLabel("Search in:"), c);
+		form.add(new JLabel(tr("find.search.in")), c);
 		c.gridx = 1;
 		c.gridwidth = 2;
 		c.fill = GridBagConstraints.HORIZONTAL;
@@ -84,7 +86,7 @@ public final class NetFindDialog extends JDialog {
 		c.gridwidth = 1;
 		c.fill = GridBagConstraints.NONE;
 		c.weightx = 0;
-		form.add(new JLabel("File name:"), c);
+		form.add(new JLabel(tr("find.file.name")), c);
 		c.gridx = 1;
 		c.gridwidth = 2;
 		c.fill = GridBagConstraints.HORIZONTAL;
@@ -105,14 +107,16 @@ public final class NetFindDialog extends JDialog {
 		form.add(caseSensitiveBox, c);
 
 		var buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		var findButton = new JButton("Find");
-		var cancelButton = new JButton("Cancel");
+		var findButton = new JButton(tr("find.button"));
+		var cancelButton = new JButton(tr("common.cancel"));
 		buttons.add(findButton);
 		buttons.add(cancelButton);
 
 		getRootPane().setDefaultButton(findButton);
 		findButton.addActionListener(e -> submit(rootPath, onSubmit));
 		cancelButton.addActionListener(e -> dispose());
+		getRootPane().registerKeyboardAction(e -> cancelButton.doClick(),
+				javax.swing.KeyStroke.getKeyStroke("ESCAPE"), javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW);
 		patternField.addActionListener(e -> submit(rootPath, onSubmit));
 
 		setLayout(new BorderLayout());

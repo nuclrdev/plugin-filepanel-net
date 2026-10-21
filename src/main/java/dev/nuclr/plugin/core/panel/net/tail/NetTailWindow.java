@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.tail;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -75,7 +77,7 @@ public final class NetTailWindow extends JDialog {
 	 * @param remotePath the absolute remote path to follow
 	 */
 	public NetTailWindow(Window owner, NetConnection connection, String remotePath) {
-		super(owner, "Tail: " + remotePath, ModalityType.MODELESS);
+		super(owner, tr("tail.title", remotePath), ModalityType.MODELESS);
 
 		textArea.setEditable(false);
 		textArea.setLineWrap(false);
@@ -83,8 +85,8 @@ public final class NetTailWindow extends JDialog {
 		textArea.setBackground(Color.BLACK);
 		textArea.setForeground(new Color(0xE0, 0xE0, 0xE0));
 
-		var statusLabel = new JLabel("Connecting…");
-		var closeButton = new JButton("Close");
+		var statusLabel = new JLabel(tr("tail.connecting"));
+		var closeButton = new JButton(tr("common.close"));
 		closeButton.addActionListener(e -> {
 			stopped.set(true);
 			dispose();
@@ -96,6 +98,8 @@ public final class NetTailWindow extends JDialog {
 		var buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 		buttons.add(closeButton);
 		south.add(buttons, BorderLayout.EAST);
+		getRootPane().registerKeyboardAction(e -> closeButton.doClick(),
+				javax.swing.KeyStroke.getKeyStroke("ESCAPE"), javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW);
 
 		setLayout(new BorderLayout());
 		add(new JScrollPane(textArea), BorderLayout.CENTER);
@@ -124,7 +128,7 @@ public final class NetTailWindow extends JDialog {
 				String command = "tail -F -n " + (first ? INITIAL_LINES : 0) + " " + ShellEscape.quote(remotePath);
 				first = false;
 
-				setStatus(statusLabel, "Following " + remotePath);
+				setStatus(statusLabel, tr("tail.following", remotePath));
 
 				try (ChannelExec channel = connection.execChannel(command)) {
 					channel.open().verify(java.time.Duration.ofSeconds(15));
@@ -143,7 +147,7 @@ public final class NetTailWindow extends JDialog {
 					return;
 				}
 
-				setStatus(statusLabel, "Connection lost; reconnecting…");
+				setStatus(statusLabel, tr("tail.reconnecting"));
 				Thread.sleep(2_000);
 
 			} catch (InterruptedException e) {
@@ -154,7 +158,7 @@ public final class NetTailWindow extends JDialog {
 					return;
 				}
 				log.info("Tail of {} interrupted: {}; retrying", remotePath, e.getMessage());
-				setStatus(statusLabel, "Connection lost (" + e.getMessage() + "); reconnecting…");
+				setStatus(statusLabel, tr("tail.reconnecting.error", e.getMessage()));
 				try {
 					Thread.sleep(2_000);
 				} catch (InterruptedException interrupted) {

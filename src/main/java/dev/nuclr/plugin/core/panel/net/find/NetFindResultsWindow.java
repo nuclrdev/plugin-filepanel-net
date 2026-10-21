@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.find;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Window;
@@ -49,7 +51,7 @@ public final class NetFindResultsWindow extends JDialog {
 	private static final long serialVersionUID = 1L;
 
 	private final DefaultListModel<String> model = new DefaultListModel<>();
-	private final JLabel statusLabel = new JLabel("Searching…");
+	private final JLabel statusLabel = new JLabel(tr("find.searching"));
 	private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
 	/**
@@ -62,7 +64,7 @@ public final class NetFindResultsWindow extends JDialog {
 	 */
 	public NetFindResultsWindow(Window owner, NetConnection connection, NetFindRequest request,
 			Consumer<String> onNavigate) {
-		super(owner, "Find results: " + request.namePattern(), ModalityType.MODELESS);
+		super(owner, tr("find.results.title", request.namePattern()), ModalityType.MODELESS);
 
 		var list = new JList<>(model);
 		list.addMouseListener(new MouseAdapter() {
@@ -84,8 +86,8 @@ public final class NetFindResultsWindow extends JDialog {
 		});
 
 		var buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		var stopButton = new JButton("Stop");
-		var closeButton = new JButton("Close");
+		var stopButton = new JButton(tr("find.stop"));
+		var closeButton = new JButton(tr("common.close"));
 		stopButton.addActionListener(e -> {
 			cancelled.set(true);
 			stopButton.setEnabled(false);
@@ -96,6 +98,8 @@ public final class NetFindResultsWindow extends JDialog {
 		});
 		buttons.add(stopButton);
 		buttons.add(closeButton);
+		getRootPane().registerKeyboardAction(e -> closeButton.doClick(),
+				javax.swing.KeyStroke.getKeyStroke("ESCAPE"), javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW);
 
 		var south = new JPanel(new BorderLayout());
 		south.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
@@ -127,10 +131,11 @@ public final class NetFindResultsWindow extends JDialog {
 					count[0]++;
 					SwingUtilities.invokeLater(() -> model.addElement(path));
 				});
-				finish(cancelled.get() ? "Stopped: " + count[0] + " match(es)" : count[0] + " match(es)");
+				finish(cancelled.get() ? tr("find.stopped", String.valueOf(count[0]))
+						: tr("find.matches", String.valueOf(count[0])));
 			} catch (Exception e) {
 				log.warn("Find search failed for {}: {}", request.rootPath(), e.getMessage());
-				finish("Search failed: " + e.getMessage());
+				finish(tr("find.failed", e.getMessage()));
 			}
 		});
 	}

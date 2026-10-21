@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.find;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -128,10 +130,10 @@ public final class NetFindService {
 			String stderrText = stderr.toString(StandardCharsets.UTF_8);
 
 			if (exitStatus != null && exitStatus == 127) {
-				throw new IOException("remote find not found (exit 127)");
+				throw new IOException(tr("find.remote.missing"));
 			}
 			if (matches == 0 && exitStatus != null && exitStatus != 0 && looksLikeMissingCommand(stderrText)) {
-				throw new IOException("remote find appears unavailable: " + firstLine(stderrText));
+				throw new IOException(tr("find.remote.unavailable", firstLine(stderrText)));
 			}
 			if (exitStatus != null && exitStatus != 0 && !stderrText.isBlank()) {
 				log.debug("Remote find on {} exited {} with stderr: {}", request.rootPath(), exitStatus, stderrText);

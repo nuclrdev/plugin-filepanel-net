@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.ui;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
@@ -61,7 +63,7 @@ public final class NetGoToFolderDialog extends JDialog {
 	 * @param onSubmit    invoked with the entered path when the user clicks OK
 	 */
 	public NetGoToFolderDialog(Window owner, String currentPath, Consumer<String> onSubmit) {
-		super(owner, "Go to Folder", ModalityType.APPLICATION_MODAL);
+		super(owner, tr("goto.title"), ModalityType.APPLICATION_MODAL);
 
 		pathField = new JTextField(currentPath, 32);
 		TextFieldSupport.install(pathField);
@@ -74,14 +76,14 @@ public final class NetGoToFolderDialog extends JDialog {
 
 		c.gridx = 0;
 		c.gridy = 0;
-		form.add(new JLabel("Folder:"), c);
+		form.add(new JLabel(tr("goto.folder")), c);
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1;
 		form.add(pathField, c);
 
-		var okButton = new JButton("OK");
-		var cancelButton = new JButton("Cancel");
+		var okButton = new JButton(tr("common.ok"));
+		var cancelButton = new JButton(tr("common.cancel"));
 		okButton.addActionListener(e -> submit(onSubmit));
 		cancelButton.addActionListener(e -> dispose());
 		pathField.addActionListener(e -> submit(onSubmit));

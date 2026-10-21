@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -192,7 +194,7 @@ public final class NetEditService implements NuclrEventListener {
 			recordLocalStamp(session);
 			session.lastRemoteStamp = RemoteStamp.of(connection.statOrNull(remotePath));
 		} catch (IOException e) {
-			Alerts.showError(context, "Edit", "<html>Cannot stat <b>" + remotePath + "</b><br/>" + e.getMessage() + "</html>");
+			Alerts.showError(context, tr("edit.title"), tr("edit.stat.failed", remotePath, e.getMessage()));
 			cleanup(session);
 			return;
 		}
@@ -209,12 +211,12 @@ public final class NetEditService implements NuclrEventListener {
 
 		final boolean[] ok = { false };
 
-		NetProgressDialog.run("Download", callback -> {
+		NetProgressDialog.run(tr("download.title"), callback -> {
 			try {
 				session.tempDir = Files.createTempDirectory("nuclr-net-edit-");
 				session.tempFile = session.tempDir.resolve(RemotePaths.name(session.remotePath));
 
-				callback.onStart("Downloading " + RemotePaths.name(session.remotePath));
+				callback.onStart(tr("download.progress", RemotePaths.name(session.remotePath)));
 
 				try (OutputStream out = countingOutput(
 						Files.newOutputStream(session.tempFile), callback, expectedSize)) {
@@ -234,9 +236,8 @@ public final class NetEditService implements NuclrEventListener {
 			} catch (IOException e) {
 				log.warn("Download of [{}] failed: {}", session.remotePath, e.getMessage());
 				if (!callback.isCancelled()) {
-					Alerts.showError(context, "Download",
-							"<html>Could not download <b>" + session.remotePath + "</b><br/>" + e.getMessage()
-									+ "</html>");
+					Alerts.showError(context, tr("download.title"),
+							tr("download.failed", session.remotePath, e.getMessage()));
 				}
 			}
 		}, context);
@@ -264,10 +265,8 @@ public final class NetEditService implements NuclrEventListener {
 				syncOnce(session);
 			} catch (IOException e) {
 				log.warn("Sync of [{}] failed: {}", session.remotePath, e.getMessage());
-				Alerts.showError(session.context, "Upload",
-						"<html>Could not upload <b>" + session.remotePath + "</b><br/>" + e.getMessage()
-								+ "<br/><br/>Your changes are kept locally at<br/><b>" + session.tempFile
-								+ "</b></html>");
+				Alerts.showError(session.context, tr("upload.title"),
+						tr("upload.failed", session.remotePath, e.getMessage(), String.valueOf(session.tempFile)));
 				session.stopped = true;
 				sessions.remove(session.tempFile);
 				return; // keep the temp copy so the user's edits survive
@@ -302,9 +301,8 @@ public final class NetEditService implements NuclrEventListener {
 			// User declined: stop syncing but keep watching for nothing further;
 			// end the session and keep the local copy for manual recovery.
 			session.stopped = true;
-			Alerts.showInfo(session.context, "Upload skipped",
-					"<html>The remote file was left untouched. Your edited copy is at<br/><b>"
-							+ session.tempFile + "</b></html>");
+			Alerts.showInfo(session.context, tr("upload.skipped.title"),
+					tr("upload.skipped", String.valueOf(session.tempFile)));
 			sessions.remove(session.tempFile);
 			return;
 		}
@@ -332,9 +330,8 @@ public final class NetEditService implements NuclrEventListener {
 		final boolean[] overwrite = { false };
 		Alerts.runOnEdtAndWait(() -> overwrite[0] = JOptionPane.showConfirmDialog(
 				null,
-				"<html>The remote file changed while you were editing:<br/><b>" + session.remotePath
-						+ "</b><br/><br/>Overwrite the remote changes with your copy?</html>",
-				"Remote file modified",
+				tr("upload.conflict", session.remotePath),
+				tr("upload.conflict.title"),
 				JOptionPane.YES_NO_OPTION,
 				JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION);
 		return overwrite[0];

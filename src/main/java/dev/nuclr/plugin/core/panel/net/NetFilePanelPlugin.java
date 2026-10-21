@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.KeyboardFocusManager;
 import java.awt.Window;
 import java.io.IOException;
@@ -124,6 +126,9 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 	@Override
 	public void preinit(NuclrPluginContext context) {
+		if (context != null) {
+			Messages.use(context.getLocale());
+		}
 		this.context = context;
 		this.currentFolder = NetVirtualResource.root();
 		NetEditService.instance(context);
@@ -279,7 +284,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		ServerConfig config = serverId != null ? serverStore.byId(serverId) : null;
 
 		if (config == null) {
-			Alerts.showError(context, "Connect", "Server profile not found. It may have been removed.");
+			Alerts.showError(context, tr("connect.title"), tr("connect.server.not.found"));
 			return listServerList(sink);
 		}
 
@@ -289,8 +294,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			connection.ensureOpen();
 		} catch (IOException e) {
 			log.warn("Could not connect to {}: {}", config.address(), e.getMessage());
-			Alerts.showError(context, "Connect",
-					"<html>Could not connect to <b>" + config.address() + "</b><br/>" + e.getMessage() + "</html>");
+			Alerts.showError(context, tr("connect.title"), tr("connect.failed", config.address(), e.getMessage()));
 			return listServerList(sink);
 		}
 
@@ -311,12 +315,11 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		try {
 			dirAttrs = connection.statOrNull(remotePath);
 		} catch (IOException e) {
-			Alerts.showError(context, "Open Folder",
-					"<html>Could not open <b>" + remotePath + "</b><br/>" + e.getMessage() + "</html>");
+			Alerts.showError(context, tr("open.folder.title"), tr("open.folder.failed", remotePath, e.getMessage()));
 			return null;
 		}
 		if (dirAttrs == null) {
-			Alerts.showError(context, "Open Folder", "<html>Not found:<br/><b>" + remotePath + "</b></html>");
+			Alerts.showError(context, tr("open.folder.title"), tr("open.folder.not.found", remotePath));
 			return null;
 		}
 
@@ -324,7 +327,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		try {
 			dirPath = connection.path(remotePath);
 		} catch (IOException e) {
-			Alerts.showError(context, "Open Folder", e.getMessage());
+			Alerts.showError(context, tr("open.folder.title"), e.getMessage());
 			return null;
 		}
 
@@ -396,8 +399,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			}
 		} catch (IOException e) {
 			log.error("Failed to list remote directory {}: {}", remotePath, e.getMessage(), e);
-			Alerts.showError(context, "Open Folder",
-					"<html>Could not list <b>" + remotePath + "</b><br/>" + e.getMessage() + "</html>");
+			Alerts.showError(context, tr("open.folder.title"), tr("open.folder.list.failed", remotePath, e.getMessage()));
 		}
 
 		// Folders first, then files, both alphabetically — a sane default order
@@ -480,8 +482,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		if (connection == null) {
 			// We are showing a remote folder but hold no connection for its server (the profile was
 			// removed mid-browse, say). Refuse loudly rather than fall through to a local shell.
-			Alerts.showError(context, "Console",
-					"No open connection for this server. Reopen it from the Net list.");
+			Alerts.showError(context, tr("console.title"), tr("console.no.connection"));
 			throw new IOException("No open connection for server " + serverId);
 		}
 
@@ -493,8 +494,8 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			// shell: they asked for a console on the server, and a local one would be a silent
 			// bait-and-switch.
 			log.warn("Could not open a shell on {}: {}", connection.config().address(), e.getMessage(), e);
-			Alerts.showError(context, "Console", "<html>Could not open a shell on <b>"
-					+ connection.config().address() + "</b><br/>" + e.getMessage() + "</html>");
+			Alerts.showError(context, tr("console.title"),
+					tr("console.shell.failed", connection.config().address(), e.getMessage()));
 			throw e;
 		}
 	}
@@ -623,24 +624,24 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		var items = new ArrayList<NuclrMenuResource>();
 
 		if (currentConnection == null) {
-			items.add(menu("Edit Server", "F4", "net.server.edit"));
-			items.add(menu("Copy Server", "F5", "net.server.copy"));
-			items.add(menu("New Server", "F7", "net.server.new"));
-			items.add(menu("Remove Server", "F8", "net.server.remove"));
+			items.add(menu(tr("menu.edit.server"), "F4", "net.server.edit"));
+			items.add(menu(tr("menu.copy.server"), "F5", "net.server.copy"));
+			items.add(menu(tr("menu.new.server"), "F7", "net.server.new"));
+			items.add(menu(tr("menu.remove.server"), "F8", "net.server.remove"));
 			return items;
 		}
 
 		boolean isDirectory = source != null && source.isFolder();
 
-		items.add(menu("View", "F3", "filepanel.view"));
-		items.add(menu("Edit", "F4", "filepanel.edit"));
-		items.add(menu("Copy", "F5", "filepanel.copy"));
-		items.add(menu(isDirectory ? "Move" : "Rename/Move", "F6", "filepanel.move"));
-		items.add(menu("Make Folder", "F7", "filepanel.makeFolder"));
-		items.add(menu("Delete", "F8", "filepanel.delete"));
-		items.add(menu("Go to Folder", "F9", "net.goto"));
-		items.add(menu("Create file", "Shift+F4", "createFile"));
-		items.add(menu("Find", "Alt+F7", "find"));
+		items.add(menu(tr("menu.view"), "F3", "filepanel.view"));
+		items.add(menu(tr("menu.edit"), "F4", "filepanel.edit"));
+		items.add(menu(tr("menu.copy"), "F5", "filepanel.copy"));
+		items.add(menu(isDirectory ? tr("menu.move") : tr("menu.rename.move"), "F6", "filepanel.move"));
+		items.add(menu(tr("menu.make.folder"), "F7", "filepanel.makeFolder"));
+		items.add(menu(tr("menu.delete"), "F8", "filepanel.delete"));
+		items.add(menu(tr("menu.go.to.folder"), "F9", "net.goto"));
+		items.add(menu(tr("menu.create.file"), "Shift+F4", "createFile"));
+		items.add(menu(tr("menu.find"), "Alt+F7", "find"));
 		addSortMenuItems(items);
 
 		return items;
@@ -654,16 +655,18 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	 * silently duplicate "Modified" instead of doing something distinct.
 	 */
 	private static void addSortMenuItems(List<NuclrMenuResource> items) {
-		items.add(sortByColumn("Name", "Ctrl+F3", "name"));
-		items.add(sortByColumn("Extension", "Ctrl+F4", "ext"));
-		items.add(sortByColumn("Modified", "Ctrl+F5", "modified"));
-		items.add(sortByColumn("Size", "Ctrl+F6", "size"));
-		items.add(menu("Unsort", "Ctrl+F7", "filepanel.sort:unsorted"));
-		items.add(menu("Sort", "Ctrl+F12", "filepanel.sort:dialog"));
+		items.add(sortByColumn("Name", tr("menu.sort.name"), "Ctrl+F3", "name"));
+		items.add(sortByColumn("Extension", tr("menu.sort.extension"), "Ctrl+F4", "ext"));
+		items.add(sortByColumn("Modified", tr("menu.sort.modified"), "Ctrl+F5", "modified"));
+		items.add(sortByColumn("Size", tr("menu.sort.size"), "Ctrl+F6", "size"));
+		items.add(menu(tr("menu.unsort"), "Ctrl+F7", "filepanel.sort:unsorted"));
+		items.add(menu(tr("menu.sort"), "Ctrl+F12", "filepanel.sort:dialog"));
 	}
 
-	private static NuclrMenuResource sortByColumn(String columnName, String functionKey, String criterion) {
-		return menu(columnName, functionKey, "filepanel.sort:" + criterion + ":" + columnName);
+	/** The event names the column by its (English) key; only the label is translated. */
+	private static NuclrMenuResource sortByColumn(String columnName, String label, String functionKey,
+			String criterion) {
+		return menu(label, functionKey, "filepanel.sort:" + criterion + ":" + columnName);
 	}
 
 	private static NuclrMenuResource menu(String name, String functionKey, String eventType) {
@@ -679,14 +682,14 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		// any plugin, but these are set now so the menu picks them up automatically once it does.
 		if (currentConnection == null) {
 			return List.of(
-					NuclrContextMenuItem.builder().label("New Server").actionType("net.server.new")
+					NuclrContextMenuItem.builder().label(tr("context.new.server")).actionType("net.server.new")
 							.iconKey("server-add").build(),
-					NuclrContextMenuItem.builder().label("Edit Server").actionType("net.server.edit")
+					NuclrContextMenuItem.builder().label(tr("context.edit.server")).actionType("net.server.edit")
 							.iconKey("edit").build(),
-					NuclrContextMenuItem.builder().label("Copy Server").actionType("net.server.copy")
+					NuclrContextMenuItem.builder().label(tr("context.copy.server")).actionType("net.server.copy")
 							.iconKey("copy").build(),
 					NuclrContextMenuItem.separator(),
-					NuclrContextMenuItem.builder().label("Remove Server").actionType("net.server.remove")
+					NuclrContextMenuItem.builder().label(tr("context.remove.server")).actionType("net.server.remove")
 							.iconKey("delete").destructive(true).build());
 		}
 
@@ -696,7 +699,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 					.iconKey("terminal").build());
 			items.add(NuclrContextMenuItem.separator());
 		}
-		items.add(NuclrContextMenuItem.builder().label("Delete").actionType("filepanel.delete")
+		items.add(NuclrContextMenuItem.builder().label(tr("context.delete")).actionType("filepanel.delete")
 				.iconKey("delete").destructive(true).build());
 		return items;
 	}
@@ -727,7 +730,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		}
 		if (selectedResources.size() == 1) {
 			var resource = selectedResources.get(0);
-			String type = resource.isFolder() ? "Folder" : NetResource.humanReadableSize(resource.getLength());
+			String type = resource.isFolder() ? tr("panel.summary.folder") : NetResource.humanReadableSize(resource.getLength());
 			return resource.getName() + "  |  " + type;
 		}
 
@@ -742,8 +745,8 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 				totalBytes += resource.getLength();
 			}
 		}
-		return "Bytes: " + NetResource.humanReadableSize(totalBytes) + ",  files: " + fileCount + ",  folders: "
-				+ folderCount;
+		return tr("panel.summary.selection", NetResource.humanReadableSize(totalBytes), String.valueOf(fileCount),
+				String.valueOf(folderCount));
 	}
 
 	// =========================================================================
@@ -838,7 +841,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	private void acceptCopy(List<NuclrResource> selectedResources, NuclrResource focusedResource,
 			Map<String, Object> data) {
 		if (currentConnection == null || currentFolder == null) {
-			Alerts.showError(context, "Copy", "Open a remote folder first.");
+			Alerts.showError(context, tr("copy.title"), tr("open.remote.folder.first"));
 			return;
 		}
 		new NetCopyService().copy(currentConnection, currentFolder, selectedResources, focusedResource, context);
@@ -849,7 +852,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	private void acceptMove(List<NuclrResource> selectedResources, NuclrResource focusedResource,
 			Map<String, Object> data) {
 		if (currentConnection == null || currentFolder == null) {
-			Alerts.showError(context, "Move", "Open a remote folder first.");
+			Alerts.showError(context, tr("move.title"), tr("open.remote.folder.first"));
 			return;
 		}
 		new NetMoveService().move(currentConnection, currentFolder, selectedResources, focusedResource, context);
@@ -1019,7 +1022,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 	private void handleNewServer(Map<String, Object> data) {
 
-		var result = NetConnectionDialog.show(activeWindow(), "New Server", new ServerConfig());
+		var result = NetConnectionDialog.show(activeWindow(), tr("server.new.title"), new ServerConfig());
 		if (result == null) {
 			return;
 		}
@@ -1034,16 +1037,16 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 		String serverId = NetVirtualResource.serverIdOf(focusedResource);
 		if (serverId == null) {
-			Alerts.showError(context, "Edit Server", "Select a server to edit.");
+			Alerts.showError(context, tr("server.edit.title"), tr("server.edit.select"));
 			return;
 		}
 		ServerConfig existing = serverStore.byId(serverId);
 		if (existing == null) {
-			Alerts.showError(context, "Edit Server", "Server profile not found.");
+			Alerts.showError(context, tr("server.edit.title"), tr("server.not.found"));
 			return;
 		}
 
-		var result = NetConnectionDialog.show(activeWindow(), "Edit Server", existing);
+		var result = NetConnectionDialog.show(activeWindow(), tr("server.edit.title"), existing);
 		if (result == null) {
 			return;
 		}
@@ -1065,16 +1068,16 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 		String serverId = NetVirtualResource.serverIdOf(focusedResource);
 		if (serverId == null) {
-			Alerts.showError(context, "Copy Server", "Select a server to copy.");
+			Alerts.showError(context, tr("server.copy.title"), tr("server.copy.select"));
 			return;
 		}
 		ServerConfig existing = serverStore.byId(serverId);
 		if (existing == null) {
-			Alerts.showError(context, "Copy Server", "Server profile not found.");
+			Alerts.showError(context, tr("server.copy.title"), tr("server.not.found"));
 			return;
 		}
 
-		var result = NetConnectionDialog.show(activeWindow(), "Copy Server", existing.duplicate());
+		var result = NetConnectionDialog.show(activeWindow(), tr("server.copy.title"), existing.duplicate());
 		if (result == null) {
 			return;
 		}
@@ -1089,7 +1092,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		try {
 			serverStore.upsert(result.config());
 		} catch (IOException e) {
-			Alerts.showError(context, "Server Profile", "Could not save the server profile: " + e.getMessage());
+			Alerts.showError(context, tr("server.profile.title"), tr("server.save.failed", e.getMessage()));
 			return false;
 		}
 		if (result.password() != null) {
@@ -1119,8 +1122,8 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 
-		if (!Alerts.confirmDestructive(context, "Remove Server",
-				"Remove " + ids.size() + " server profile(s)? Any open connection will be closed.")) {
+		if (!Alerts.confirmDestructive(context, tr("server.remove.title"),
+				tr("server.remove.confirm", String.valueOf(ids.size())))) {
 			Alerts.cancel(context);
 			return;
 		}

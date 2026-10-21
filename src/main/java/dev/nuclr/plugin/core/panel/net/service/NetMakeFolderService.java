@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,7 +44,7 @@ public class NetMakeFolderService {
 	 * @return the created path, or {@code null} when cancelled or failed
 	 */
 	public Path makeFolder(NuclrResource currentFolder, NuclrPluginContext context) {
-		return create(currentFolder, context, "Make Folder", "Folder name:", true);
+		return create(currentFolder, context, tr("folder.make.title"), tr("folder.name.prompt"), true);
 	}
 
 	/**
@@ -53,7 +55,7 @@ public class NetMakeFolderService {
 	 * @return the created path, or {@code null} when cancelled or failed
 	 */
 	public Path makeFile(NuclrResource currentFolder, NuclrPluginContext context) {
-		return create(currentFolder, context, "Create File", "File name:", false);
+		return create(currentFolder, context, tr("file.create.title"), tr("file.name.prompt"), false);
 	}
 
 	private Path create(NuclrResource currentFolder, NuclrPluginContext context, String title, String prompt,
@@ -75,14 +77,14 @@ public class NetMakeFolderService {
 		}
 		name = name.trim();
 		if (name.contains("/") || name.contains("\0") || name.equals(".") || name.equals("..")) {
-			Alerts.showError(context, title, "Invalid name: " + name);
+			Alerts.showError(context, title, tr("create.invalid.name", name));
 			return null;
 		}
 
 		Path target = base.resolve(name);
 		try {
 			if (Files.exists(target)) {
-				Alerts.showError(context, title, "<html>Already exists:<br/><b>" + target + "</b></html>");
+				Alerts.showError(context, title, tr("create.exists", String.valueOf(target)));
 				return null;
 			}
 			if (folder) {
@@ -95,7 +97,7 @@ public class NetMakeFolderService {
 		} catch (IOException e) {
 			log.warn("Could not create [{}]: {}", target, e.getMessage());
 			Alerts.showError(context, title,
-					"<html>Could not create <b>" + target + "</b><br/>" + e.getMessage() + "</html>");
+					tr("create.failed", String.valueOf(target), e.getMessage()));
 			return null;
 		}
 	}

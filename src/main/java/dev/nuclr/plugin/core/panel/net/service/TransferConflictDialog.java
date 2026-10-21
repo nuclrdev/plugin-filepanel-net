@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.nio.file.Path;
 
 import javax.swing.JOptionPane;
@@ -52,14 +54,15 @@ final class TransferConflictDialog {
 			return stickyAction;
 		}
 
-		final String[] options = { "Overwrite", "Overwrite All", "Skip", "Skip All", "Cancel" };
+		final String[] options = { tr("conflict.overwrite"), tr("conflict.overwrite.all"), tr("common.skip"),
+				tr("conflict.skip.all"), tr("common.cancel") };
 		final int[] choice = new int[] { 4 };
 
 		Alerts.popup(context);
 		Alerts.runOnEdtAndWait(() -> choice[0] = JOptionPane.showOptionDialog(
 				null,
-				"<html>The target already exists:<br/><b>" + target + "</b><br/><br/>Overwrite it?</html>",
-				"File exists",
+				tr("conflict.message", String.valueOf(target)),
+				tr("conflict.title"),
 				JOptionPane.DEFAULT_OPTION,
 				JOptionPane.WARNING_MESSAGE,
 				null,

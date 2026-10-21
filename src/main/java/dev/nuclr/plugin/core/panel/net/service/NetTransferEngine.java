@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -204,7 +206,7 @@ public final class NetTransferEngine {
 			return;
 		}
 
-		cb.onStart("Copying " + fileName(source));
+		cb.onStart(tr("copy.progress", String.valueOf(fileName(source))));
 
 		try {
 			if (Files.exists(target)) {

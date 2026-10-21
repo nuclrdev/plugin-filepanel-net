@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.ui;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -68,11 +70,11 @@ public final class NetConnectionDialog extends JDialog {
 	private final JTextField hostField = new JTextField(20);
 	private final JTextField portField = new JTextField("22", 5);
 	private final JTextField userField = new JTextField(20);
-	private final JRadioButton passwordAuth = new JRadioButton("Password", true);
-	private final JRadioButton keyAuth = new JRadioButton("Private key");
+	private final JRadioButton passwordAuth = new JRadioButton(tr("server.auth.password"), true);
+	private final JRadioButton keyAuth = new JRadioButton(tr("server.auth.key"));
 	private final JPasswordField passwordField = new JPasswordField(20);
 	private final JTextField keyPathField = new JTextField(20);
-	private final JButton browseKeyButton = new JButton("Browse…");
+	private final JButton browseKeyButton = new JButton(tr("server.browse"));
 	private final JPasswordField passphraseField = new JPasswordField(20);
 	private final JTextField initialPathField = new JTextField(20);
 
@@ -115,10 +117,10 @@ public final class NetConnectionDialog extends JDialog {
 		c.anchor = GridBagConstraints.WEST;
 		int row = 0;
 
-		row = addRow(c, row, "Name (optional):", nameField);
-		row = addRow(c, row, "Host:", hostField);
-		row = addRow(c, row, "Port:", portField);
-		row = addRow(c, row, "Username:", userField);
+		row = addRow(c, row, tr("server.field.name"), nameField);
+		row = addRow(c, row, tr("server.field.host"), hostField);
+		row = addRow(c, row, tr("server.field.port"), portField);
+		row = addRow(c, row, tr("server.field.username"), userField);
 
 		c.gridx = 0;
 		c.gridy = row;
@@ -130,21 +132,21 @@ public final class NetConnectionDialog extends JDialog {
 		row++;
 		c.gridwidth = 1;
 
-		row = addRow(c, row, "Password:", withTrailing(passwordField, TextFieldSupport.showPasswordToggle(passwordField)));
+		row = addRow(c, row, tr("server.field.password"), withTrailing(passwordField, TextFieldSupport.showPasswordToggle(passwordField)));
 
-		row = addRow(c, row, "Key file:", withTrailing(keyPathField, browseKeyButton));
+		row = addRow(c, row, tr("server.field.key.file"), withTrailing(keyPathField, browseKeyButton));
 		browseKeyButton.addActionListener(e -> browseForKey());
 
-		row = addRow(c, row, "Key passphrase:",
+		row = addRow(c, row, tr("server.field.key.passphrase"),
 				withTrailing(passphraseField, TextFieldSupport.showPasswordToggle(passphraseField)));
-		row = addRow(c, row, "Initial directory:", initialPathField);
+		row = addRow(c, row, tr("server.field.initial.directory"), initialPathField);
 
 		passwordAuth.addActionListener(e -> updateAuthEnablement());
 		keyAuth.addActionListener(e -> updateAuthEnablement());
 		updateAuthEnablement();
 
-		var okButton = new JButton("OK");
-		var cancelButton = new JButton("Cancel");
+		var okButton = new JButton(tr("common.ok"));
+		var cancelButton = new JButton(tr("common.cancel"));
 		okButton.addActionListener(e -> submit(config));
 		cancelButton.addActionListener(e -> dispose());
 		getRootPane().setDefaultButton(okButton);
@@ -202,7 +204,7 @@ public final class NetConnectionDialog extends JDialog {
 
 	private void browseForKey() {
 		var chooser = new JFileChooser();
-		chooser.setDialogTitle("Select private key file");
+		chooser.setDialogTitle(tr("server.key.chooser.title"));
 		if (!keyPathField.getText().isBlank()) {
 			File current = new File(keyPathField.getText());
 			if (current.getParentFile() != null) {
@@ -220,11 +222,11 @@ public final class NetConnectionDialog extends JDialog {
 		String user = userField.getText().trim();
 
 		if (host.isBlank()) {
-			showValidationError("Host is required.");
+			showValidationError(tr("server.validation.host"));
 			return;
 		}
 		if (user.isBlank()) {
-			showValidationError("Username is required.");
+			showValidationError(tr("server.validation.username"));
 			return;
 		}
 
@@ -235,7 +237,7 @@ public final class NetConnectionDialog extends JDialog {
 				throw new NumberFormatException();
 			}
 		} catch (NumberFormatException e) {
-			showValidationError("Port must be a number between 1 and 65535.");
+			showValidationError(tr("server.validation.port"));
 			return;
 		}
 
@@ -253,12 +255,12 @@ public final class NetConnectionDialog extends JDialog {
 		if (keyAuth.isSelected()) {
 			String keyPath = keyPathField.getText().trim();
 			if (keyPath.isBlank()) {
-				showValidationError("A private key file is required for key authentication.");
+				showValidationError(tr("server.validation.key.required"));
 				return;
 			}
 			Path path = Path.of(keyPath);
 			if (!Files.isRegularFile(path)) {
-				showValidationError("The private key file does not exist:\n" + keyPath);
+				showValidationError(tr("server.validation.key.missing", keyPath));
 				return;
 			}
 			config.setAuthMethod(ServerConfig.AuthMethod.KEY);
@@ -280,7 +282,7 @@ public final class NetConnectionDialog extends JDialog {
 	}
 
 	private void showValidationError(String message) {
-		JOptionPane.showMessageDialog(this, message, "Invalid Server Profile", JOptionPane.ERROR_MESSAGE);
+		JOptionPane.showMessageDialog(this, message, tr("server.validation.title"), JOptionPane.ERROR_MESSAGE);
 	}
 
 	/**

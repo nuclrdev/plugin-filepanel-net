@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -39,8 +41,6 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class NetDeleteService {
-
-	private static final String DialogTitle = "Delete";
 
 	private static final int MAX_LISTED = 10;
 
@@ -65,7 +65,7 @@ public class NetDeleteService {
 
 		var completed = new AtomicBoolean(true);
 
-		NetProgressDialog.run(DialogTitle, callback -> {
+		NetProgressDialog.run(tr("delete.title"), callback -> {
 			int done = 0;
 			for (Path path : paths) {
 				if (callback.isCancelled()) {
@@ -77,8 +77,8 @@ public class NetDeleteService {
 					callback.onProgress(++done, paths.size());
 				} catch (IOException e) {
 					completed.set(false);
-					Alerts.showError(context, DialogTitle,
-							"<html>Could not delete <b>" + path + "</b><br/>" + e.getMessage() + "</html>");
+					Alerts.showError(context, tr("delete.title"),
+							tr("delete.failed", String.valueOf(path), e.getMessage()));
 				}
 			}
 		}, context);
@@ -91,19 +91,19 @@ public class NetDeleteService {
 
 	private boolean confirm(List<Path> paths, NuclrPluginContext context) {
 
-		var sb = new StringBuilder("<html>Permanently delete from the remote server:<br/><br/>");
+		var sb = new StringBuilder("<html>").append(tr("delete.confirm.heading")).append("<br/><br/>");
 		int listed = 0;
 		for (Path path : paths) {
 			if (listed++ == MAX_LISTED) {
-				sb.append("… and ").append(paths.size() - MAX_LISTED).append(" more<br/>");
+				sb.append(tr("delete.confirm.more", String.valueOf(paths.size() - MAX_LISTED))).append("<br/>");
 				break;
 			}
 			sb.append("<b>").append(path).append("</b><br/>");
 		}
-		sb.append("<br/>This cannot be undone.</html>");
+		sb.append("<br/>").append(tr("delete.confirm.undo")).append("</html>");
 
 		Alerts.popup(context);
-		return Alerts.confirmDestructive(context, DialogTitle, sb.toString());
+		return Alerts.confirmDestructive(context, tr("delete.title"), sb.toString());
 	}
 
 	/**
@@ -140,7 +140,7 @@ public class NetDeleteService {
 		}
 
 		if (callback != null) {
-			callback.onStart("Deleting " + (path.getFileName() != null ? path.getFileName() : path));
+			callback.onStart(tr("delete.progress", String.valueOf(path.getFileName() != null ? path.getFileName() : path)));
 			if (callback.isCancelled()) {
 				return;
 			}

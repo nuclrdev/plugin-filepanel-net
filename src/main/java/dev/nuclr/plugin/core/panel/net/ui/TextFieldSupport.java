@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.ui;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.awt.event.ActionEvent;
 
 import javax.swing.AbstractAction;
@@ -78,17 +80,17 @@ public final class TextFieldSupport {
 		bindKey(field, "control Y", "net-redo", redo);
 		bindKey(field, "control shift Z", "net-redo-alt", redo);
 
-		var undoItem = new JMenuItem("Undo", menuIcon("undo"));
+		var undoItem = new JMenuItem(tr("edit.undo"), menuIcon("undo"));
 		undoItem.addActionListener(e -> undo.run());
-		var redoItem = new JMenuItem("Redo", menuIcon("redo"));
+		var redoItem = new JMenuItem(tr("edit.redo"), menuIcon("redo"));
 		redoItem.addActionListener(e -> redo.run());
-		var cutItem = new JMenuItem("Cut", menuIcon("cut"));
+		var cutItem = new JMenuItem(tr("edit.cut"), menuIcon("cut"));
 		cutItem.addActionListener(e -> field.cut());
-		var copyItem = new JMenuItem("Copy", menuIcon("copy"));
+		var copyItem = new JMenuItem(tr("edit.copy"), menuIcon("copy"));
 		copyItem.addActionListener(e -> field.copy());
-		var pasteItem = new JMenuItem("Paste", menuIcon("paste"));
+		var pasteItem = new JMenuItem(tr("edit.paste"), menuIcon("paste"));
 		pasteItem.addActionListener(e -> field.paste());
-		var selectAllItem = new JMenuItem("Select All", menuIcon("select-all"));
+		var selectAllItem = new JMenuItem(tr("edit.select.all"), menuIcon("select-all"));
 		selectAllItem.addActionListener(e -> field.selectAll());
 
 		var menu = new JPopupMenu();
@@ -138,8 +140,8 @@ public final class TextFieldSupport {
 	 */
 	public static JCheckBox showPasswordToggle(JPasswordField field) {
 		char hiddenEchoChar = field.getEchoChar();
-		var checkbox = new JCheckBox("Show");
-		checkbox.setToolTipText("Show the typed characters");
+		var checkbox = new JCheckBox(tr("password.show"));
+		checkbox.setToolTipText(tr("password.show.tooltip"));
 		checkbox.addActionListener(e -> field.setEchoChar(checkbox.isSelected() ? (char) 0 : hiddenEchoChar));
 		return checkbox;
 	}

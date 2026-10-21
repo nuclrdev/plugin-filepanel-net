@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -91,7 +93,7 @@ public final class Alerts {
 	 * @return {@code true} when the user confirmed
 	 */
 	public static boolean confirmDestructive(NuclrPluginContext context, String title, String message) {
-		Object[] options = { "Yes", "No" };
+		Object[] options = { tr("common.yes"), tr("common.no") };
 		var optionPane = new JOptionPane(message, JOptionPane.WARNING_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
 				options, options[1]);
 		var result = new boolean[1];

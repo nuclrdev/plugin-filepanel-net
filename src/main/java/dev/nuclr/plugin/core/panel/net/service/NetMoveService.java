@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.net.service;
 
+import static dev.nuclr.plugin.core.panel.net.Messages.tr;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,8 +47,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class NetMoveService {
 
-	private static final String DialogTitle = "Move";
-
 	/**
 	 * Move the selection into the destination remote folder.
 	 *
@@ -62,19 +62,18 @@ public class NetMoveService {
 
 		Path destination = destinationFolder != null ? destinationFolder.getPath() : null;
 		if (destination == null) {
-			Alerts.showError(context, DialogTitle, "The destination is not a remote folder.");
+			Alerts.showError(context, tr("move.title"), tr("transfer.destination.not.remote"));
 			return false;
 		}
 
 		List<Path> sources = NetCopyService.collectSources(selectedResources, focusedResource);
 		if (sources.isEmpty()) {
-			Alerts.showError(context, DialogTitle, "There is nothing to move.");
+			Alerts.showError(context, tr("move.title"), tr("move.nothing"));
 			return false;
 		}
 
-		if (!Alerts.confirm(context, DialogTitle,
-				"<html>Move <b>" + NetCopyService.header(sources) + "</b> to<br/><b>"
-						+ destinationFolder.getFullPath() + "</b> ?</html>")) {
+		if (!Alerts.confirm(context, tr("move.title"),
+				tr("move.confirm", NetCopyService.header(sources), destinationFolder.getFullPath()))) {
 			Alerts.cancel(context);
 			return false;
 		}
@@ -90,7 +89,7 @@ public class NetMoveService {
 
 		var completed = new AtomicBoolean(true);
 
-		NetProgressDialog.run(DialogTitle, callback -> {
+		NetProgressDialog.run(tr("move.title"), callback -> {
 			int done = 0;
 			for (Path source : sources) {
 				if (callback.isCancelled()) {
@@ -98,7 +97,7 @@ public class NetMoveService {
 					return;
 				}
 				Path target = destination.resolve(fileName(source));
-				callback.onStart("Moving " + fileName(source));
+				callback.onStart(tr("move.progress", String.valueOf(fileName(source))));
 				try {
 					if (source.equals(target)) {
 						continue; // moving into its own folder is a no-op
@@ -108,8 +107,8 @@ public class NetMoveService {
 					callback.onComplete();
 				} catch (IOException e) {
 					completed.set(false);
-					Alerts.showError(context, DialogTitle,
-							"<html>Could not move <b>" + source + "</b><br/>" + e.getMessage() + "</html>");
+					Alerts.showError(context, tr("move.title"),
+							tr("move.failed", String.valueOf(source), e.getMessage()));
 				}
 			}
 		}, context);
@@ -127,23 +126,23 @@ public class NetMoveService {
 		var conflictDialog = new TransferConflictDialog(context);
 		var copied = new AtomicBoolean(false);
 
-		NetProgressDialog.run(DialogTitle, callback -> {
+		NetProgressDialog.run(tr("move.title"), callback -> {
 			var engine = new NetTransferEngine(connection, callback, conflictDialog::resolve, (source, e) -> {
-				Alerts.showError(context, DialogTitle,
-						"<html>Could not move <b>" + source + "</b><br/>" + e.getMessage() + "</html>");
+				Alerts.showError(context, tr("move.title"),
+						tr("move.failed", String.valueOf(source), e.getMessage()));
 				return false; // abort: do not delete sources after a partial copy
 			});
 			copied.set(engine.copy(sources, destination));
 
 			if (copied.get() && !callback.isCancelled()) {
 				for (Path source : sources) {
-					callback.onStart("Removing " + fileName(source));
+					callback.onStart(tr("move.progress.remove", String.valueOf(fileName(source))));
 					try {
 						NetDeleteService.deleteRecursively(source, callback);
 					} catch (IOException e) {
 						log.warn("Moved but could not remove source [{}]: {}", source, e.getMessage());
-						Alerts.showError(context, DialogTitle, "<html>Copied, but could not remove the source <b>"
-								+ source + "</b><br/>" + e.getMessage() + "</html>");
+						Alerts.showError(context, tr("move.title"),
+								tr("move.remove.failed", String.valueOf(source), e.getMessage()));
 					}
 				}
 			}
@@ -176,8 +175,8 @@ public class NetMoveService {
 		Alerts.popup(context);
 		Alerts.runOnEdtAndWait(() -> entered[0] = (String) JOptionPane.showInputDialog(
 				null,
-				"New name:",
-				"Rename",
+				tr("rename.prompt"),
+				tr("rename.title"),
 				JOptionPane.PLAIN_MESSAGE,
 				null,
 				null,
@@ -188,26 +187,24 @@ public class NetMoveService {
 			return false;
 		}
 		if (newName.contains("/") || newName.contains("\0")) {
-			Alerts.showError(context, "Rename", "The name must not contain '/' characters.");
+			Alerts.showError(context, tr("rename.title"), tr("rename.no.slash"));
 			return false;
 		}
 
 		Path target = source.resolveSibling(newName);
 		var renamed = new AtomicBoolean(false);
 
-		NetProgressDialog.run("Rename", callback -> {
-			callback.onStart("Renaming " + focusedResource.getName());
+		NetProgressDialog.run(tr("rename.title"), callback -> {
+			callback.onStart(tr("rename.progress", focusedResource.getName()));
 			try {
 				if (Files.exists(target)) {
-					Alerts.showError(context, "Rename",
-							"<html>The target already exists:<br/><b>" + target + "</b></html>");
+					Alerts.showError(context, tr("rename.title"), tr("rename.exists", String.valueOf(target)));
 					return;
 				}
 				Files.move(source, target);
 				renamed.set(true);
 			} catch (IOException e) {
-				Alerts.showError(context, "Rename",
-						"<html>Could not rename <b>" + source + "</b><br/>" + e.getMessage() + "</html>");
+				Alerts.showError(context, tr("rename.title"), tr("rename.failed", String.valueOf(source), e.getMessage()));
 			}
 		}, context);
 
