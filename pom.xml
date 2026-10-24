@@ -6,7 +6,7 @@
 
 	<groupId>dev.nuclr.plugin.core</groupId>
 	<artifactId>filepanel-net</artifactId>
-	<version>1.1.4</version>
+	<version>1.1.5</version>
 	<name>Nuclr File Panel - Net</name>
 
 	<properties>
