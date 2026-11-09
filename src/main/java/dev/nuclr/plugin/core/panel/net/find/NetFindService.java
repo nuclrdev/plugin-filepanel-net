@@ -35,8 +35,9 @@ import java.util.regex.Pattern;
 import org.apache.sshd.client.channel.ChannelExec;
 import org.apache.sshd.client.channel.ClientChannelEvent;
 
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellAccess;
 import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
@@ -77,9 +78,9 @@ public final class NetFindService {
 	public static void search(NetConnection connection, NetFindRequest request, AtomicBoolean cancelled,
 			Consumer<String> onMatch) throws IOException {
 
-		if (request.matchMode() == FindMatchMode.GLOB) {
+		if (request.matchMode() == FindMatchMode.GLOB && connection instanceof ShellAccess shell) {
 			try {
-				if (searchViaRemoteFind(connection, request, cancelled, onMatch)) {
+				if (searchViaRemoteFind(shell, request, cancelled, onMatch)) {
 					return;
 				}
 			} catch (IOException e) {
@@ -97,14 +98,14 @@ public final class NetFindService {
 	 * @return {@code true} when {@code find} ran successfully (including
 	 *         "ran but zero matches") and no fallback is needed
 	 */
-	private static boolean searchViaRemoteFind(NetConnection connection, NetFindRequest request,
+	private static boolean searchViaRemoteFind(ShellAccess shell, NetFindRequest request,
 			AtomicBoolean cancelled, Consumer<String> onMatch) throws IOException {
 
 		String nameFlag = request.caseSensitive() ? "-name" : "-iname";
 		String command = "find " + ShellEscape.quote(request.rootPath()) + " -mindepth 1 " + nameFlag + " "
 				+ ShellEscape.quote(request.namePattern()) + " -print0";
 
-		ChannelExec channel = connection.execChannel(command);
+		ChannelExec channel = shell.execChannel(command);
 		int matches = 0;
 		ByteArrayOutputStream stderr = new ByteArrayOutputStream();
 

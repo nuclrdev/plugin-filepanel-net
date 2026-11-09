@@ -37,7 +37,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import lombok.extern.slf4j.Slf4j;
 
 /**

@@ -31,10 +31,9 @@ import java.time.format.FormatStyle;
 import java.util.List;
 import java.util.Locale;
 
-import org.apache.sshd.sftp.client.SftpClient;
-
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteAttributes;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
 
 /**
@@ -70,29 +69,29 @@ public final class NetResource extends NuclrResource {
 			FormatStyle.MEDIUM);
 
 	/**
-	 * Build a remote entry from one SFTP listing element. All attributes come
+	 * Build a remote entry from one listing element. All attributes come
 	 * from the already-fetched {@code attrs}; no extra round trips are made.
 	 *
 	 * @param ctx        plugin context (locale for date formatting), may be {@code null}
 	 * @param serverId   owning server profile id
-	 * @param sftpPath   NIO path on the mounted SFTP filesystem
+	 * @param remoteNioPath NIO path on the connection's filesystem
 	 * @param remotePath absolute remote path as text
-	 * @param attrs      attributes as returned by the SFTP listing (already
+	 * @param attrs      attributes as returned by the listing (already
 	 *                   symlink-resolved where the caller chose to)
 	 * @param link       whether the directory entry itself is a symlink
 	 */
-	public NetResource(NuclrPluginContext ctx, String serverId, Path sftpPath, String remotePath,
-			SftpClient.Attributes attrs, boolean link) {
+	public NetResource(NuclrPluginContext ctx, String serverId, Path remoteNioPath, String remotePath,
+			RemoteAttributes attrs, boolean link) {
 
-		super(sftpPath);
+		super(remoteNioPath);
 
 		String entryName = RemotePaths.name(remotePath);
 		this.name = entryName;
 		this.setFullPath(remotePath);
 		this.setUuid(serverId + ":" + remotePath);
 
-		boolean directory = attrs != null && attrs.isDirectory();
-		long size = attrs != null && !directory ? attrs.getSize() : 0L;
+		boolean directory = attrs != null && attrs.directory();
+		long size = attrs != null && !directory ? attrs.size() : 0L;
 
 		this.setFolder(directory);
 		this.setLink(link);
@@ -100,9 +99,9 @@ public final class NetResource extends NuclrResource {
 		this.setHidden(entryName.startsWith(".") && !entryName.equals("..") && !entryName.equals("."));
 		this.setReadable(true);
 
-		LocalDateTime modified = toLocal(attrs != null ? attrs.getModifyTime() : null);
-		LocalDateTime accessed = toLocal(attrs != null ? attrs.getAccessTime() : null);
-		LocalDateTime created = toLocal(attrs != null ? attrs.getCreateTime() : null);
+		LocalDateTime modified = toLocal(attrs != null ? attrs.modifyTime() : null);
+		LocalDateTime accessed = toLocal(attrs != null ? attrs.accessTime() : null);
+		LocalDateTime created = toLocal(attrs != null ? attrs.createTime() : null);
 		this.setLastModifiedDateTime(modified);
 		this.setLastAccessDateTime(accessed != null ? accessed : modified);
 		this.setCreatedDateTime(created != null ? created : modified);
@@ -118,7 +117,7 @@ public final class NetResource extends NuclrResource {
 		this.getMetadata().put("Size", directory ? (entryName.equals("..") ? tr("resource.size.up") : "") : humanReadableSize(size));
 		this.getMetadata().put("Type", typeLabel(directory, link));
 		this.getMetadata().put("Modified", modified == null ? "-" : formatter.format(modified));
-		this.getMetadata().put("Permissions", attrs != null ? permissionsString(attrs.getPermissions()) : "-");
+		this.getMetadata().put("Permissions", attrs != null ? permissionsString(attrs.permissions()) : "-");
 		this.getMetadata().put("Full Path", remotePath);
 	}
 
@@ -162,7 +161,7 @@ public final class NetResource extends NuclrResource {
 	 * Render a POSIX permission bit mask as the familiar {@code rwxr-xr-x}
 	 * string (special bits ignored).
 	 *
-	 * @param permissions the SFTP permission bits
+	 * @param permissions the POSIX permission bits
 	 * @return the nine-character permission string
 	 */
 	public static String permissionsString(int permissions) {

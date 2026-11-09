@@ -51,20 +51,21 @@ import java.util.stream.Stream;
 
 import org.apache.sshd.client.channel.ChannelExec;
 import org.apache.sshd.client.channel.ClientChannelEvent;
-import org.apache.sshd.sftp.client.SftpClient;
 
 import com.github.difflib.DiffUtils;
 import com.github.difflib.UnifiedDiffUtils;
 
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.plugin.core.panel.net.NetDirectoryCache;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteAttributes;
 import dev.nuclr.plugin.core.panel.net.service.NetEditService;
 import dev.nuclr.plugin.core.panel.net.ssh.ConnectionRegistry;
 import dev.nuclr.plugin.core.panel.net.ssh.Connections;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellAccess;
 import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
@@ -224,25 +225,21 @@ public final class NetActions {
 		NetConnection connection = connect(config);
 		String path = resolve(connection, text(args, "path", false));
 
-		SftpClient.Attributes attrs = connection.statOrNull(path);
+		RemoteAttributes attrs = connection.statOrNull(path);
 		if (attrs == null) {
 			throw new ActionException("Not found on " + config.displayName() + ": " + path);
 		}
-		if (!attrs.isDirectory()) {
+		if (!attrs.directory()) {
 			throw new ActionException(path + " is a file, not a folder. Use net.read to read it.");
 		}
 
 		var entries = new ArrayList<Map<String, Object>>();
-		try (SftpClient sftp = connection.sftp()) {
-			for (SftpClient.DirEntry entry : sftp.readDir(path)) {
+		try (var listing = connection.list(path)) {
+			for (var entry : listing) {
 				if (callback.isCancelled()) {
 					throw new ActionException("Cancelled.");
 				}
-				String name = entry.getFilename();
-				if (".".equals(name) || "..".equals(name)) {
-					continue;
-				}
-				entries.add(describeEntry(name, entry.getAttributes()));
+				entries.add(describeEntry(entry.name(), entry.attributes()));
 			}
 		}
 		entries.sort(Comparator.comparing(entry -> (String) entry.get("name")));
@@ -257,25 +254,25 @@ public final class NetActions {
 		return result;
 	}
 
-	private static Map<String, Object> describeEntry(String name, SftpClient.Attributes attrs) {
+	private static Map<String, Object> describeEntry(String name, RemoteAttributes attrs) {
 		var entry = new LinkedHashMap<String, Object>();
 		entry.put("name", name);
 		entry.put("type", typeOf(attrs));
-		entry.put("size", attrs.getSize());
-		FileTime modified = attrs.getModifyTime();
+		entry.put("size", attrs.size());
+		FileTime modified = attrs.modifyTime();
 		entry.put("modified", modified == null ? null : modified.toInstant().toString());
-		entry.put("permissions", permissions(attrs.getPermissions()));
+		entry.put("permissions", permissions(attrs.permissions()));
 		return entry;
 	}
 
-	private static String typeOf(SftpClient.Attributes attrs) {
-		if (attrs.isSymbolicLink()) {
+	private static String typeOf(RemoteAttributes attrs) {
+		if (attrs.symbolicLink()) {
 			return "symlink";
 		}
-		if (attrs.isDirectory()) {
+		if (attrs.directory()) {
 			return "directory";
 		}
-		if (attrs.isRegularFile()) {
+		if (attrs.regularFile()) {
 			return "file";
 		}
 		return "other";
@@ -302,17 +299,17 @@ public final class NetActions {
 		NetConnection connection = connect(config);
 		String path = resolve(connection, text(args, "path", true));
 
-		SftpClient.Attributes attrs = connection.statOrNull(path);
+		RemoteAttributes attrs = connection.statOrNull(path);
 		if (attrs == null) {
 			throw new ActionException("Not found on " + config.displayName() + ": " + path);
 		}
-		if (attrs.isDirectory()) {
+		if (attrs.directory()) {
 			throw new ActionException(path + " is a folder. Use net.list to see what it contains.");
 		}
 
 		byte[] data;
 		boolean truncated;
-		try (SftpClient sftp = connection.sftp(); InputStream in = sftp.read(path)) {
+		try (InputStream in = connection.read(path)) {
 			data = in.readNBytes(maxBytes);
 			truncated = in.read() != -1;
 		}
@@ -320,7 +317,7 @@ public final class NetActions {
 		String text = decodeUtf8(data, truncated);
 		var result = new LinkedHashMap<String, Object>();
 		result.put("path", path);
-		result.put("size", attrs.getSize());
+		result.put("size", attrs.size());
 		result.put("encoding", text != null ? "utf-8" : "base64");
 		result.put("content", text != null ? text : Base64.getEncoder().encodeToString(data));
 		result.put("truncated", truncated);
@@ -360,6 +357,9 @@ public final class NetActions {
 		String command = text(args, "command", true);
 		int timeoutSeconds = integer(args, "timeoutSeconds", DEFAULT_TIMEOUT_SECONDS, 1, MAX_TIMEOUT_SECONDS);
 		NetConnection connection = connect(config);
+		if (!(connection instanceof ShellAccess shell)) {
+			throw new ActionException(config.displayName() + " does not support running commands.");
+		}
 		String cwd = text(args, "cwd", false);
 		String commandLine = cwd == null ? command : withWorkingDirectory(resolve(connection, cwd), command);
 
@@ -374,7 +374,7 @@ public final class NetActions {
 
 		// execChannel only holds the connection's lock while creating the channel, so
 		// a long command does not block the panels browsing the same server.
-		ChannelExec channel = connection.execChannel(commandLine);
+		ChannelExec channel = shell.execChannel(commandLine);
 		try {
 			// An empty, already finished stdin: commands that read input see end of
 			// input at once instead of waiting until the timeout.
@@ -448,22 +448,22 @@ public final class NetActions {
 			throw new ActionException("Cannot write to the root folder itself; give a file path.");
 		}
 
-		SftpClient.Attributes existing = connection.statOrNull(target);
-		if (existing != null && existing.isDirectory()) {
+		RemoteAttributes existing = connection.statOrNull(target);
+		if (existing != null && existing.directory()) {
 			throw new ActionException(target + " is a folder; give the path of a file inside it.");
 		}
 		String parent = parentOf(target);
 		ensureFolder(connection, parent, createDirs);
 
 		if (existing != null) {
-			byte[] old = existing.getSize() <= MAX_DIFF_BYTES ? readAll(connection, target) : null;
+			byte[] old = existing.size() <= MAX_DIFF_BYTES ? readAll(connection, target) : null;
 			if (old != null && Arrays.equals(old, bytes)) {
 				return writeResult(target, 0, false, true);
 			}
 			String diff = old == null ? null : unifiedDiff(target, old, bytes);
 			String details = "Server: " + config.displayName() + " (" + config.address() + ")\n"
 					+ "File: " + target + "\n"
-					+ "Size: " + existing.getSize() + " -> " + bytes.length + " bytes"
+					+ "Size: " + existing.size() + " -> " + bytes.length + " bytes"
 					+ (diff == null ? "\nNo diff to show: the file is binary or larger than 1 MB." : "");
 			if (!callback.confirm("Overwrite " + target + " on " + config.displayName() + "?", details, diff)) {
 				throw new ActionException("Not written: overwriting " + target + " was not approved.");
@@ -479,7 +479,7 @@ public final class NetActions {
 			checkCancelled(callback, "Cancelled; " + target + " was not written.");
 			// A replaced file keeps its mode (a 0600 secret stays 0600, a script stays
 			// executable); a new one gets the server's default.
-			createStagingFile(connection, sibling, existing == null ? null : existing.getPermissions(), target);
+			createStagingFile(connection, sibling, existing == null ? null : existing.permissions(), target);
 			Files.write(connection.path(sibling), bytes, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
 			checkCancelled(callback, "Cancelled; " + target + " was not written.");
 			connection.atomicReplace(sibling, target);
@@ -545,8 +545,8 @@ public final class NetActions {
 			return;
 		}
 		int wanted = mode & 07777;
-		try (SftpClient sftp = connection.sftp()) {
-			sftp.setStat(sibling, new SftpClient.Attributes().perms(wanted));
+		try {
+			connection.setPermissions(sibling, wanted);
 		} catch (IOException e) {
 			log.debug("Server refused permissions {} on {}: {}", Integer.toOctalString(wanted), sibling, e.getMessage());
 		}
@@ -555,8 +555,8 @@ public final class NetActions {
 		// secret turning 0644), missing ones break it (a 0755 script turning 0644
 		// can no longer run). If the server will not set the mode, nothing is
 		// replaced or created.
-		SftpClient.Attributes actual = connection.statOrNull(sibling);
-		int got = actual == null ? 0 : actual.getPermissions() & 07777;
+		RemoteAttributes actual = connection.statOrNull(sibling);
+		int got = actual == null ? 0 : actual.permissions() & 07777;
 		if (got != wanted) {
 			String effect = (got & ~wanted & 0777) != 0 ? "more widely accessible"
 					: (wanted & ~got & 0111) != 0 ? "no longer executable" : "different";
@@ -586,7 +586,7 @@ public final class NetActions {
 		String source = resolve(from, text(args, "fromPath", true));
 		String target = resolve(to, text(args, "toPath", true));
 
-		SftpClient.Attributes sourceAttrs = from.statOrNull(source);
+		RemoteAttributes sourceAttrs = from.statOrNull(source);
 		if (sourceAttrs == null) {
 			throw new ActionException("Not found on " + fromConfig.displayName() + ": " + source);
 		}
@@ -607,7 +607,7 @@ public final class NetActions {
 		var folders = new ArrayList<String>();
 		var files = new ArrayList<String>();
 		int skippedLinks = 0;
-		if (sourceAttrs.isDirectory()) {
+		if (sourceAttrs.directory()) {
 			folders.add("");
 			Path root = from.path(source);
 			try (Stream<Path> walk = Files.walk(root)) {
@@ -628,7 +628,7 @@ public final class NetActions {
 					}
 				}
 			}
-		} else if (sourceAttrs.isSymbolicLink()) {
+		} else if (sourceAttrs.symbolicLink()) {
 			throw new ActionException(source + " is a symbolic link; copy the file it points to instead.");
 		} else {
 			files.add("");
@@ -642,19 +642,19 @@ public final class NetActions {
 		long totalBytes = 0;
 		for (String file : files) {
 			String destination = join(target, file);
-			SftpClient.Attributes fileAttrs = from.statOrNull(join(source, file));
-			SftpClient.Attributes destinationAttrs = to.statOrNull(destination);
+			RemoteAttributes fileAttrs = from.statOrNull(join(source, file));
+			RemoteAttributes destinationAttrs = to.statOrNull(destination);
 			if (destinationAttrs != null) {
-				if (destinationAttrs.isDirectory()) {
+				if (destinationAttrs.directory()) {
 					throw new ActionException(destination + " on " + toConfig.displayName()
 							+ " is a folder, so the file " + join(source, file) + " cannot replace it.");
 				}
 				existing.add(destination);
-				modes.put(file, destinationAttrs.getPermissions());
+				modes.put(file, destinationAttrs.permissions());
 			} else if (fileAttrs != null) {
-				modes.put(file, fileAttrs.getPermissions());
+				modes.put(file, fileAttrs.permissions());
 			}
-			totalBytes += fileAttrs == null ? 0 : fileAttrs.getSize();
+			totalBytes += fileAttrs == null ? 0 : fileAttrs.size();
 		}
 		if (!existing.isEmpty()) {
 			if (!overwrite) {
@@ -717,7 +717,7 @@ public final class NetActions {
 
 		var result = new LinkedHashMap<String, Object>();
 		result.put("files", files.size());
-		result.put("folders", sourceAttrs.isDirectory() ? folders.size() : 0);
+		result.put("folders", sourceAttrs.directory() ? folders.size() : 0);
 		result.put("bytes", copied);
 		result.put("skippedSymlinks", skippedLinks);
 		return result;
@@ -772,9 +772,8 @@ public final class NetActions {
 
 	/** The server's own absolute form of an existing path: symlinks and ".." resolved. */
 	private static String canonical(NetConnection connection, String path) {
-		try (SftpClient sftp = connection.sftp()) {
-			String real = sftp.canonicalPath(path);
-			return real == null || real.isBlank() ? path : RemotePaths.normalize(real);
+		try {
+			return connection.canonicalPath(path);
 		} catch (IOException e) {
 			return path;
 		}
@@ -858,19 +857,19 @@ public final class NetActions {
 
 	private static void ensureFolder(NetConnection connection, String folder, boolean create)
 			throws ActionException, IOException {
-		SftpClient.Attributes attrs = connection.statOrNull(folder);
+		RemoteAttributes attrs = connection.statOrNull(folder);
 		if (attrs == null) {
 			if (!create) {
 				throw new ActionException("Folder " + folder + " does not exist. Pass createDirs: true to create it.");
 			}
 			Files.createDirectories(connection.path(folder));
-		} else if (!attrs.isDirectory()) {
+		} else if (!attrs.directory()) {
 			throw new ActionException(folder + " is a file, so nothing can be written inside it.");
 		}
 	}
 
 	private static byte[] readAll(NetConnection connection, String path) throws IOException {
-		try (SftpClient sftp = connection.sftp(); InputStream in = sftp.read(path)) {
+		try (InputStream in = connection.read(path)) {
 			return in.readAllBytes();
 		}
 	}
@@ -882,8 +881,8 @@ public final class NetActions {
 	}
 
 	private static void deleteQuietly(NetConnection connection, String path) {
-		try (SftpClient sftp = connection.sftp()) {
-			sftp.remove(path);
+		try {
+			connection.delete(path);
 		} catch (IOException e) {
 			log.debug("Could not remove {}: {}", path, e.getMessage());
 		}

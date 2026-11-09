@@ -37,9 +37,10 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 
 import dev.nuclr.plugin.core.panel.net.actions.NetActionsTest.RecordingCallback;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
+import dev.nuclr.plugin.core.panel.net.ssh.SshConnection;
 
 /**
  * The actions against a real Linux machine: the test server in test-server/
@@ -79,7 +80,7 @@ class TestServerIntegrationTest {
 		var store = new ServerStore(temp.resolve("servers.json"));
 		store.save(List.of(config));
 
-		connection = new NetConnection(config, AcceptAllServerKeyVerifier.INSTANCE, new NetConnection.CredentialsProvider() {
+		connection = new SshConnection(config, AcceptAllServerKeyVerifier.INSTANCE, new NetConnection.CredentialsProvider() {
 			@Override
 			public String password(ServerConfig cfg, int retryIndex) {
 				return null;

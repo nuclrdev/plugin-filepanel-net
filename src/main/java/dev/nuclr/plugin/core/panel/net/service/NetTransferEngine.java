@@ -40,7 +40,8 @@ import java.util.Set;
 import org.apache.sshd.scp.common.helpers.ScpTimestampCommandDetails;
 
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellAccess;
 import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
@@ -101,7 +102,7 @@ public final class NetTransferEngine {
 	 * Create an engine writing into directories of the given connection's
 	 * filesystem.
 	 *
-	 * @param connection  the destination server's connection (SCP transport)
+	 * @param connection  the destination server's connection (SCP transport when it has one)
 	 * @param cb          progress/cancellation bridge
 	 * @param resolver    conflict decision callback
 	 * @param errorPrompt per-item error decision callback
@@ -240,8 +241,9 @@ public final class NetTransferEngine {
 		// sends the server (see ShellEscape.isSafeForUnquotedScp) — safe only for
 		// plain ASCII-ish paths, so anything else falls back to the always-correct
 		// (if slower) SFTP stream copy.
-		if (source.getFileSystem() == FileSystems.getDefault() && ShellEscape.isSafeForUnquotedScp(target.toString())) {
-			uploadViaScp(source, target, size);
+		if (source.getFileSystem() == FileSystems.getDefault() && connection instanceof ShellAccess shell
+				&& ShellEscape.isSafeForUnquotedScp(target.toString())) {
+			uploadViaScp(shell, source, target, size);
 		} else {
 			streamCopy(source, target);
 		}
@@ -250,12 +252,12 @@ public final class NetTransferEngine {
 	}
 
 	/** Local file to remote target: SCP over the destination's shared SSH session. */
-	private void uploadViaScp(Path source, Path target, long size) throws IOException {
+	private void uploadViaScp(ShellAccess shell, Path source, Path target, long size) throws IOException {
 
 		var time = scpTimestamp(source);
 
 		try (InputStream in = countingInput(Files.newInputStream(source))) {
-			connection.scp().upload(in, target.toString(), size, DEFAULT_FILE_PERMISSIONS, time);
+			shell.scp().upload(in, target.toString(), size, DEFAULT_FILE_PERMISSIONS, time);
 		}
 	}
 

@@ -20,6 +20,7 @@ package dev.nuclr.plugin.core.panel.net.ssh;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -47,9 +48,11 @@ import org.junit.jupiter.api.io.TempDir;
 import dev.nuclr.plugin.core.panel.net.find.FindMatchMode;
 import dev.nuclr.plugin.core.panel.net.find.NetFindRequest;
 import dev.nuclr.plugin.core.panel.net.find.NetFindService;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteAttributes;
 
 /**
- * Exercises {@link NetConnection} against a real, embedded Apache MINA SSHD
+ * Exercises {@link SshConnection} against a real, embedded Apache MINA SSHD
  * server (password auth, SFTP subsystem, SCP command factory) rooted at a
  * temp directory — a genuine SSH round trip, not a mock, covering the parts
  * of the plugin that a pure unit test cannot: authentication, the shared
@@ -60,7 +63,7 @@ import dev.nuclr.plugin.core.panel.net.find.NetFindService;
  * commands: those need a real shell on the server side, which an embedded
  * MINA server (SFTP + SCP only, no shell) does not provide.
  */
-class NetConnectionIntegrationTest {
+class SshConnectionIntegrationTest {
 
 	private static final String USERNAME = "tester";
 	private static final String PASSWORD = "s3cret";
@@ -96,7 +99,7 @@ class NetConnectionIntegrationTest {
 		}
 	}
 
-	private NetConnection connect() {
+	private SshConnection connect() {
 		var config = new ServerConfig();
 		config.setHost("localhost");
 		config.setPort(port);
@@ -115,12 +118,12 @@ class NetConnectionIntegrationTest {
 			}
 		};
 
-		return new NetConnection(config, AcceptAllServerKeyVerifier.INSTANCE, credentials);
+		return new SshConnection(config, AcceptAllServerKeyVerifier.INSTANCE, credentials);
 	}
 
 	@Test
 	void connectsAndAuthenticates() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 			assertTrue(connection.isOpen());
 		}
@@ -128,7 +131,7 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void mkdirAndListViaSftp() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			try (var sftp = connection.sftp()) {
@@ -142,7 +145,7 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void writeAndReadFileContentRoundTrips() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			Path file = connection.path("/hello.txt");
@@ -154,15 +157,15 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void statOrNullReflectsRealAttributesAndAbsence() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			Path file = connection.path("/stat-me.txt");
 			Files.writeString(file, "0123456789", StandardCharsets.UTF_8);
 
 			var attrs = connection.statOrNull("/stat-me.txt");
-			assertEquals(10L, attrs.getSize());
-			assertFalse(attrs.isDirectory());
+			assertEquals(10L, attrs.size());
+			assertFalse(attrs.directory());
 
 			assertNull(connection.statOrNull("/does-not-exist.txt"));
 		}
@@ -170,7 +173,7 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void atomicReplaceSwapsSiblingOverTarget() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			Files.writeString(connection.path("/target.conf"), "old content", StandardCharsets.UTF_8);
@@ -184,8 +187,59 @@ class NetConnectionIntegrationTest {
 	}
 
 	@Test
+	void listSkipsDotEntriesAndReportsAttributes() throws IOException {
+		try (SshConnection connection = connect()) {
+			connection.ensureOpen();
+
+			Files.createDirectories(connection.path("/listing/sub"));
+			Files.writeString(connection.path("/listing/abc.txt"), "abc", StandardCharsets.UTF_8);
+
+			var byName = new java.util.TreeMap<String, RemoteAttributes>();
+			try (var listing = connection.list("/listing")) {
+				for (var entry : listing) {
+					byName.put(entry.name(), entry.attributes());
+				}
+			}
+
+			assertEquals(Set.of("abc.txt", "sub"), byName.keySet());
+			assertTrue(byName.get("abc.txt").regularFile());
+			assertEquals(3L, byName.get("abc.txt").size());
+			assertTrue(byName.get("sub").directory());
+		}
+	}
+
+	@Test
+	void readCanonicalPathAndDeleteWorkByRemotePath() throws IOException {
+		try (SshConnection connection = connect()) {
+			connection.ensureOpen();
+
+			Files.createDirectories(connection.path("/plain"));
+			Files.writeString(connection.path("/plain/note.txt"), "by path", StandardCharsets.UTF_8);
+
+			// Read twice: each read must hand its pooled SFTP channel back on close.
+			for (int i = 0; i < 2; i++) {
+				try (var in = connection.read("/plain/note.txt")) {
+					assertEquals("by path", new String(in.readAllBytes(), StandardCharsets.UTF_8));
+				}
+			}
+
+			assertEquals("/plain/note.txt", connection.canonicalPath("/plain/../plain/note.txt"));
+
+			connection.delete("/plain/note.txt");
+			assertNull(connection.statOrNull("/plain/note.txt"));
+		}
+	}
+
+	@Test
+	void sshConnectionOffersShellAccess() throws IOException {
+		try (SshConnection connection = connect()) {
+			assertSame(connection, ShellAccess.require(connection));
+		}
+	}
+
+	@Test
 	void scpUploadThenDownloadRoundTrips() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			byte[] payload = "payload via scp".getBytes(StandardCharsets.UTF_8);
@@ -203,7 +257,7 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void findServiceRegexModeWalksNestedDirectoriesOverSftp() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			Files.createDirectories(connection.path("/search/a/b"));
@@ -226,7 +280,7 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void findServiceHonoursCancellation() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 
 			Files.createDirectories(connection.path("/cancel-test"));
@@ -254,7 +308,7 @@ class NetConnectionIntegrationTest {
 
 	@Test
 	void reconnectsAfterExplicitClose() throws IOException {
-		try (NetConnection connection = connect()) {
+		try (SshConnection connection = connect()) {
 			connection.ensureOpen();
 			assertTrue(connection.isOpen());
 
@@ -291,7 +345,7 @@ class NetConnectionIntegrationTest {
 			}
 		};
 
-		try (NetConnection connection = new NetConnection(config, AcceptAllServerKeyVerifier.INSTANCE,
+		try (SshConnection connection = new SshConnection(config, AcceptAllServerKeyVerifier.INSTANCE,
 				wrongPassword)) {
 			IOException failure = org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
 					connection::ensureOpen);
@@ -331,7 +385,7 @@ class NetConnectionIntegrationTest {
 			}
 		};
 
-		try (NetConnection connection = new NetConnection(config, AcceptAllServerKeyVerifier.INSTANCE,
+		try (SshConnection connection = new SshConnection(config, AcceptAllServerKeyVerifier.INSTANCE,
 				cacheBackedCredentials)) {
 
 			// First attempt: wrong password, cached, then auth fails.

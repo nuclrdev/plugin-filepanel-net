@@ -35,8 +35,6 @@ import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
 
-import org.apache.sshd.sftp.client.SftpClient;
-
 import dev.nuclr.platform.plugin.BaseNuclrPlugin;
 import dev.nuclr.platform.plugin.FilePanelNuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrContextMenuItem;
@@ -50,6 +48,8 @@ import dev.nuclr.plugin.core.panel.net.actions.NetActions;
 import dev.nuclr.plugin.core.panel.net.find.NetFindDialog;
 import dev.nuclr.plugin.core.panel.net.find.NetFindRequest;
 import dev.nuclr.plugin.core.panel.net.find.NetFindResultsWindow;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteAttributes;
 import dev.nuclr.plugin.core.panel.net.service.Alerts;
 import dev.nuclr.plugin.core.panel.net.service.NetCopyService;
 import dev.nuclr.plugin.core.panel.net.service.NetDeleteService;
@@ -58,7 +58,6 @@ import dev.nuclr.plugin.core.panel.net.service.NetMakeFolderService;
 import dev.nuclr.plugin.core.panel.net.service.NetMoveService;
 import dev.nuclr.plugin.core.panel.net.ssh.ConnectionRegistry;
 import dev.nuclr.plugin.core.panel.net.ssh.Connections;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.NetTerminalSession;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
@@ -82,7 +81,7 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Navigation has two levels: the {@link NetVirtualResource} server list
  * (the {@code Net} root shown on Alt+F1/Alt+F2), and — once a server entry is
- * opened — the remote filesystem mounted by {@code NetConnection}'s SFTP
+ * opened — the remote filesystem mounted by {@code SshConnection}'s SFTP
  * client, represented by ordinary {@link NetResource} entries backed by real
  * {@link Path}s. Because those paths are genuine {@code java.nio.file.Path}
  * instances, the host's existing quick-view, hex-editor and text-editor
@@ -307,11 +306,11 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		return listDirectory(connection, serverId, initial, null, sink);
 	}
 
-	/** List one remote directory over SFTP, streaming entries to {@code sink} as they arrive. */
+	/** List one remote directory, streaming entries to {@code sink} as they arrive. */
 	private NuclrResourceData listDirectory(NetConnection connection, String serverId, String remotePath,
 			AtomicBoolean cancelled, EntrySink sink) {
 
-		SftpClient.Attributes dirAttrs;
+		RemoteAttributes dirAttrs;
 		try {
 			dirAttrs = connection.statOrNull(remotePath);
 		} catch (IOException e) {
@@ -375,26 +374,22 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 		return data;
 	}
 
-	/** SFTP {@code readDir} for one folder, sorted folders-first/alphabetically. Not cached itself. */
+	/** Read one folder's listing, sorted folders-first/alphabetically. Not cached itself. */
 	private List<NetResource> fetchChildren(NetConnection connection, String serverId, String remotePath,
 			AtomicBoolean cancelled) {
 
 		var children = new ArrayList<NetResource>();
 
-		try (SftpClient sftp = connection.sftp()) {
-			for (SftpClient.DirEntry entry : sftp.readDir(remotePath)) {
+		try (var listing = connection.list(remotePath)) {
+			for (var entry : listing) {
 				if (isCancelled(cancelled)) {
 					break;
 				}
-				String name = entry.getFilename();
-				if (".".equals(name) || "..".equals(name)) {
-					continue;
-				}
-				String childPath = RemotePaths.join(remotePath, name);
+				String childPath = RemotePaths.join(remotePath, entry.name());
 				Path childNioPath = connection.path(childPath);
-				var attrs = entry.getAttributes();
+				var attrs = entry.attributes();
 				var child = new NetResource(context, serverId, childNioPath, childPath, attrs,
-						attrs.isSymbolicLink());
+						attrs.symbolicLink());
 				children.add(child);
 			}
 		} catch (IOException e) {
@@ -557,19 +552,15 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 
 		var subdirs = new ArrayList<String>();
 
-		try (SftpClient sftp = connection.sftp()) {
-			for (SftpClient.DirEntry entry : sftp.readDir(dirPath)) {
+		try (var listing = connection.list(dirPath)) {
+			for (var entry : listing) {
 				if (shouldStop(cancelled)) {
 					return;
 				}
-				String name = entry.getFilename();
-				if (".".equals(name) || "..".equals(name)) {
-					continue;
-				}
-				String childPath = RemotePaths.join(dirPath, name);
-				var attrs = entry.getAttributes();
+				String childPath = RemotePaths.join(dirPath, entry.name());
+				var attrs = entry.attributes();
 				var child = new NetResource(context, serverId, connection.path(childPath), childPath, attrs,
-						attrs.isSymbolicLink());
+						attrs.symbolicLink());
 				visitor.accept(child);
 				if (recursive && child.isFolder()) {
 					subdirs.add(childPath);
@@ -1002,7 +993,7 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 			var attrs = currentConnection.statOrNull(remotePath);
 			if (attrs != null) {
 				target = new NetResource(context, serverId, currentConnection.path(remotePath), remotePath, attrs,
-						attrs.isSymbolicLink());
+						attrs.symbolicLink());
 			}
 		} catch (IOException e) {
 			log.debug("Could not stat find result {}: {}", remotePath, e.getMessage());

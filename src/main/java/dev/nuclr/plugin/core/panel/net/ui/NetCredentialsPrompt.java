@@ -28,10 +28,10 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import dev.nuclr.plugin.core.panel.net.service.Alerts;
 import dev.nuclr.plugin.core.panel.net.ssh.ConnectionRegistry;
 import dev.nuclr.plugin.core.panel.net.ssh.HostKeyGate;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import lombok.extern.slf4j.Slf4j;
 

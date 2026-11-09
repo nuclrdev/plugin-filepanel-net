@@ -28,6 +28,7 @@ import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.channel.ClientChannelEvent;
 
 import dev.nuclr.platform.plugin.NuclrTerminalSession;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -72,12 +73,12 @@ public final class NetTerminalSession implements NuclrTerminalSession {
 	 * @param columns    initial terminal width in character cells
 	 * @param rows       initial terminal height in character cells
 	 * @return the running shell
-	 * @throws IOException if the channel cannot be opened
+	 * @throws IOException if the channel cannot be opened, or the connection has no shell
 	 */
 	public static NetTerminalSession open(NetConnection connection, String remoteDir, int columns, int rows)
 			throws IOException {
 
-		ChannelShell channel = connection.shellChannel();
+		ChannelShell channel = ShellAccess.require(connection).shellChannel();
 		channel.setUsePty(true);
 		channel.setPtyType(TERM);
 		channel.setPtyColumns(columns);

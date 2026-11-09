@@ -54,9 +54,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
+import dev.nuclr.plugin.core.panel.net.ssh.SshConnection;
 
 /** The six actions end to end, against two embedded SSH servers. */
 class NetActionsTest {
@@ -103,7 +104,7 @@ class NetActionsTest {
 			}
 			ServerConfig target = config;
 			NetConnection connection = CONNECTIONS.computeIfAbsent(target.getId(),
-					id -> new NetConnection(target, AcceptAllServerKeyVerifier.INSTANCE, new NetConnection.CredentialsProvider() {
+					id -> new SshConnection(target, AcceptAllServerKeyVerifier.INSTANCE, new NetConnection.CredentialsProvider() {
 						@Override
 						public String password(ServerConfig cfg, int retryIndex) {
 							return PASSWORD;

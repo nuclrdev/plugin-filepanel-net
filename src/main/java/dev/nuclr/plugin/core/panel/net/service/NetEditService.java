@@ -32,15 +32,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.swing.JOptionPane;
 
-import org.apache.sshd.sftp.client.SftpClient;
-
 import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
 import dev.nuclr.plugin.core.panel.net.NetDirectoryCache;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteAttributes;
 import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellAccess;
 import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
@@ -80,12 +80,12 @@ public final class NetEditService implements NuclrEventListener {
 	/** Size + mtime pair used to detect remote modification. */
 	record RemoteStamp(long size, long mtimeMillis) {
 
-		static RemoteStamp of(SftpClient.Attributes attrs) {
+		static RemoteStamp of(RemoteAttributes attrs) {
 			if (attrs == null) {
 				return null;
 			}
-			long mtime = attrs.getModifyTime() != null ? attrs.getModifyTime().toMillis() : 0;
-			return new RemoteStamp(attrs.getSize(), mtime);
+			long mtime = attrs.modifyTime() != null ? attrs.modifyTime().toMillis() : 0;
+			return new RemoteStamp(attrs.size(), mtime);
 		}
 	}
 
@@ -222,9 +222,10 @@ public final class NetEditService implements NuclrEventListener {
 						Files.newOutputStream(session.tempFile), callback, expectedSize)) {
 					// See ShellEscape.isSafeForUnquotedScp: MINA's SCP client can't safely
 					// handle paths with shell-significant characters, so fall back to a
-					// plain SFTP read for those.
-					if (ShellEscape.isSafeForUnquotedScp(session.remotePath)) {
-						session.connection.scp().download(session.remotePath, out);
+					// plain filesystem read for those (and for servers without SCP).
+					if (session.connection instanceof ShellAccess shell
+							&& ShellEscape.isSafeForUnquotedScp(session.remotePath)) {
+						shell.scp().download(session.remotePath, out);
 					} else {
 						try (InputStream in = Files.newInputStream(session.connection.path(session.remotePath))) {
 							in.transferTo(out);
@@ -348,10 +349,10 @@ public final class NetEditService implements NuclrEventListener {
 		try {
 			// See ShellEscape.isSafeForUnquotedScp: MINA's SCP client can't safely
 			// handle paths with shell-significant characters, so fall back to a
-			// plain SFTP write for those.
-			if (ShellEscape.isSafeForUnquotedScp(sibling)) {
+			// plain filesystem write for those (and for servers without SCP).
+			if (session.connection instanceof ShellAccess shell && ShellEscape.isSafeForUnquotedScp(sibling)) {
 				try (InputStream in = Files.newInputStream(session.tempFile)) {
-					session.connection.scp().upload(in, sibling, size,
+					shell.scp().upload(in, sibling, size,
 							java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"), null);
 				}
 			} else {
@@ -365,8 +366,8 @@ public final class NetEditService implements NuclrEventListener {
 			session.connection.atomicReplace(sibling, session.remotePath);
 		} catch (IOException e) {
 			// Best effort: never leave the hidden sibling behind.
-			try (SftpClient sftp = session.connection.sftp()) {
-				sftp.remove(sibling);
+			try {
+				session.connection.delete(sibling);
 			} catch (IOException ignored) {
 				// sibling may not exist
 			}

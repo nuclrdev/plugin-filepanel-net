@@ -42,7 +42,8 @@ import javax.swing.SwingUtilities;
 
 import org.apache.sshd.client.channel.ChannelExec;
 
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.ssh.ShellAccess;
 import dev.nuclr.plugin.core.panel.net.ssh.ShellEscape;
 import lombok.extern.slf4j.Slf4j;
 
@@ -130,7 +131,7 @@ public final class NetTailWindow extends JDialog {
 
 				setStatus(statusLabel, tr("tail.following", remotePath));
 
-				try (ChannelExec channel = connection.execChannel(command)) {
+				try (ChannelExec channel = ShellAccess.require(connection).execChannel(command)) {
 					channel.open().verify(java.time.Duration.ofSeconds(15));
 
 					try (var reader = new BufferedReader(

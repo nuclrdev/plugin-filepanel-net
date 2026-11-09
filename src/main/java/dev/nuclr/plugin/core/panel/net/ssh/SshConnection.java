@@ -17,13 +17,15 @@
 */
 package dev.nuclr.plugin.core.panel.net.ssh;
 
-import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.channel.ChannelExec;
@@ -38,13 +40,17 @@ import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.fs.SftpFileSystem;
 import org.apache.sshd.sftp.client.fs.SftpFileSystemProvider;
 
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteAttributes;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteEntry;
+import dev.nuclr.plugin.core.panel.net.remote.RemoteListing;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * One live SSH connection to a saved server. A single {@link ClientSession}
- * carries all traffic: the mounted {@link SftpFileSystem} (directory listings
- * and filesystem operations), {@link ScpClient} transfers and {@code exec}
- * channels ({@code find}, {@code tail}, …).
+ * A {@link NetConnection} over SSH. A single {@link ClientSession} carries all
+ * traffic: the mounted {@link SftpFileSystem} (directory listings and
+ * filesystem operations), {@link ScpClient} transfers and {@code exec}
+ * channels ({@code find}, {@code tail}, …) offered through {@link ShellAccess}.
  *
  * <p>The connection opens lazily and reconnects transparently: every consumer
  * goes through {@link #ensureOpen()}, which rebuilds a dead session from the
@@ -52,33 +58,7 @@ import lombok.extern.slf4j.Slf4j;
  * {@code ConnectionRegistry}.
  */
 @Slf4j
-public final class NetConnection implements Closeable {
-
-	/**
-	 * Supplies secrets when the connection (re)opens. Implementations prompt
-	 * the user on first use and cache the value for the session lifetime.
-	 */
-	public interface CredentialsProvider {
-
-		/**
-		 * Return the login password for a password-authenticated profile.
-		 *
-		 * @param config     the profile being opened
-		 * @param retryIndex 0 on first attempt, incremented after a failed try
-		 * @return the password, or {@code null} if the user cancelled
-		 */
-		String password(ServerConfig config, int retryIndex);
-
-		/**
-		 * Return the private-key passphrase for a key-authenticated profile.
-		 * Only invoked when the key file is actually encrypted.
-		 *
-		 * @param config     the profile being opened
-		 * @param retryIndex 0 on first attempt, incremented after a failed try
-		 * @return the passphrase, or {@code null} if the user cancelled
-		 */
-		String passphrase(ServerConfig config, int retryIndex);
-	}
+public final class SshConnection implements NetConnection, ShellAccess {
 
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 	private static final Duration AUTH_TIMEOUT = Duration.ofSeconds(15);
@@ -100,28 +80,15 @@ public final class NetConnection implements Closeable {
 	 * @param keyVerifier host-key verifier (see {@link HostKeyGate})
 	 * @param credentials secret supplier used on every (re)open
 	 */
-	public NetConnection(ServerConfig config, ServerKeyVerifier keyVerifier, CredentialsProvider credentials) {
+	public SshConnection(ServerConfig config, ServerKeyVerifier keyVerifier, CredentialsProvider credentials) {
 		this.config = config;
 		this.keyVerifier = keyVerifier;
 		this.credentials = credentials;
 	}
 
-	/**
-	 * Return the profile this connection belongs to.
-	 *
-	 * @return the server profile
-	 */
+	@Override
 	public ServerConfig config() {
 		return config;
-	}
-
-	/**
-	 * Return the profile id (registry key).
-	 *
-	 * @return the server id
-	 */
-	public String serverId() {
-		return config.getId();
 	}
 
 	/**
@@ -129,16 +96,12 @@ public final class NetConnection implements Closeable {
 	 *
 	 * @return {@code true} when usable without reconnecting
 	 */
+	@Override
 	public synchronized boolean isOpen() {
 		return session != null && session.isOpen() && fileSystem != null && fileSystem.isOpen();
 	}
 
-	/**
-	 * Open the connection if it is not already open, transparently rebuilding a
-	 * dropped session. All remote work must call this first.
-	 *
-	 * @throws IOException if connecting, host verification or authentication fails
-	 */
+	@Override
 	public synchronized void ensureOpen() throws IOException {
 		if (isOpen()) {
 			return;
@@ -228,11 +191,7 @@ public final class NetConnection implements Closeable {
 		return "/";
 	}
 
-	/**
-	 * Return the login home directory resolved when the session opened.
-	 *
-	 * @return the remote home directory, or {@code /} when unknown
-	 */
+	@Override
 	public synchronized String home() {
 		return home != null ? home : "/";
 	}
@@ -244,18 +203,13 @@ public final class NetConnection implements Closeable {
 	 * @return the SFTP filesystem
 	 * @throws IOException if the connection cannot be (re)opened
 	 */
+	@Override
 	public synchronized SftpFileSystem fileSystem() throws IOException {
 		ensureOpen();
 		return fileSystem;
 	}
 
-	/**
-	 * Resolve an absolute remote path string against the mounted filesystem.
-	 *
-	 * @param remotePath the absolute remote path
-	 * @return the NIO path on the SFTP filesystem
-	 * @throws IOException if the connection cannot be (re)opened
-	 */
+	@Override
 	public Path path(String remotePath) throws IOException {
 		return fileSystem().getPath(RemotePaths.normalize(remotePath));
 	}
@@ -270,71 +224,88 @@ public final class NetConnection implements Closeable {
 		return fileSystem().getClient();
 	}
 
-	/**
-	 * Create an SCP client over the shared session.
-	 *
-	 * @return the SCP client
-	 * @throws IOException if the connection cannot be (re)opened
-	 */
-	public synchronized ScpClient scp() throws IOException {
-		ensureOpen();
-		return ScpClientCreator.instance().createScpClient(session);
+	@Override
+	public RemoteListing list(String remotePath) throws IOException {
+		SftpClient sftp = sftp();
+		Iterable<SftpClient.DirEntry> entries;
+		try {
+			entries = sftp.readDir(remotePath);
+		} catch (IOException | RuntimeException e) {
+			sftp.close();
+			throw e;
+		}
+		return new RemoteListing() {
+
+			@Override
+			public Iterator<RemoteEntry> iterator() {
+				return new SkipDotsIterator(entries.iterator());
+			}
+
+			@Override
+			public void close() throws IOException {
+				sftp.close();
+			}
+		};
+	}
+
+	/** Maps SFTP directory entries to {@link RemoteEntry}, dropping {@code .} and {@code ..}. */
+	private static final class SkipDotsIterator implements Iterator<RemoteEntry> {
+
+		private final Iterator<SftpClient.DirEntry> raw;
+		private RemoteEntry next;
+
+		SkipDotsIterator(Iterator<SftpClient.DirEntry> raw) {
+			this.raw = raw;
+		}
+
+		@Override
+		public boolean hasNext() {
+			while (next == null && raw.hasNext()) {
+				SftpClient.DirEntry entry = raw.next();
+				String name = entry.getFilename();
+				if (!".".equals(name) && !"..".equals(name)) {
+					next = new RemoteEntry(name, attributes(entry.getAttributes()));
+				}
+			}
+			return next != null;
+		}
+
+		@Override
+		public RemoteEntry next() {
+			if (!hasNext()) {
+				throw new NoSuchElementException();
+			}
+			RemoteEntry result = next;
+			next = null;
+			return result;
+		}
 	}
 
 	/**
-	 * Open a raw exec channel for a remote command. The caller owns the
-	 * channel (open, stream wiring, close). Arguments embedded in
-	 * {@code command} must be quoted with {@link ShellEscape#quote}.
+	 * Convert SFTP attributes to the protocol-neutral form.
 	 *
-	 * @param command the remote command line
-	 * @return the unopened exec channel
-	 * @throws IOException if the connection cannot be (re)opened
+	 * @param attrs the SFTP attributes, may be {@code null}
+	 * @return the converted attributes, or {@code null} when {@code attrs} is
 	 */
-	public synchronized ChannelExec execChannel(String command) throws IOException {
-		ensureOpen();
-		return session.createExecChannel(command);
+	static RemoteAttributes attributes(SftpClient.Attributes attrs) {
+		if (attrs == null) {
+			return null;
+		}
+		return new RemoteAttributes(
+				attrs.isDirectory(),
+				attrs.isRegularFile(),
+				attrs.isSymbolicLink(),
+				attrs.getSize(),
+				attrs.getModifyTime(),
+				attrs.getAccessTime(),
+				attrs.getCreateTime(),
+				attrs.getPermissions());
 	}
 
-	/**
-	 * Open a raw interactive shell channel on the shared session, for the
-	 * commander's embedded console (Ctrl+O). The caller owns the channel (pty
-	 * setup, stream wiring, open, close); see {@code NetTerminalSession}.
-	 *
-	 * <p>The channel rides on the same {@link ClientSession} as the SFTP mount,
-	 * so it costs no extra connection and no second authentication — and closing
-	 * it must never close that session, which the panel is still browsing with.
-	 *
-	 * @return the unopened shell channel
-	 * @throws IOException if the connection cannot be (re)opened
-	 */
-	public synchronized ChannelShell shellChannel() throws IOException {
-		ensureOpen();
-		return session.createShellChannel();
-	}
-
-	/**
-	 * Run a short remote command and return its stdout. Fails (with stderr in
-	 * the exception message) when the command exits non-zero.
-	 *
-	 * @param command the remote command line (quote arguments with {@link ShellEscape#quote})
-	 * @return the command's standard output
-	 * @throws IOException if the connection fails or the command exits non-zero
-	 */
-	public synchronized String exec(String command) throws IOException {
-		ensureOpen();
-		return session.executeRemoteCommand(command);
-	}
-
-	/**
-	 * Stat a remote path, following symlinks.
-	 *
-	 * @param remotePath the absolute remote path
-	 * @return the attributes, or {@code null} when the path does not exist
-	 * @throws IOException on transport errors
-	 */
-	public SftpClient.Attributes statOrNull(String remotePath) throws IOException {
+	@Override
+	public RemoteAttributes statOrNull(String remotePath) throws IOException {
 		try (SftpClient sftp = sftp()) {
-			return sftp.stat(remotePath);
+			return attributes(sftp.stat(remotePath));
 		} catch (IOException e) {
 			if (isNoSuchFile(e)) {
 				return null;
@@ -343,16 +314,87 @@ public final class NetConnection implements Closeable {
 		}
 	}
 
+	@Override
+	public String canonicalPath(String remotePath) throws IOException {
+		try (SftpClient sftp = sftp()) {
+			String real = sftp.canonicalPath(remotePath);
+			return real == null || real.isBlank() ? remotePath : RemotePaths.normalize(real);
+		}
+	}
+
+	@Override
+	public InputStream read(String remotePath) throws IOException {
+		SftpClient sftp = sftp();
+		try {
+			InputStream in = sftp.read(remotePath);
+			return new java.io.FilterInputStream(in) {
+				@Override
+				public void close() throws IOException {
+					try {
+						super.close();
+					} finally {
+						sftp.close();
+					}
+				}
+			};
+		} catch (IOException | RuntimeException e) {
+			sftp.close();
+			throw e;
+		}
+	}
+
+	@Override
+	public void delete(String remotePath) throws IOException {
+		try (SftpClient sftp = sftp()) {
+			sftp.remove(remotePath);
+		}
+	}
+
+	@Override
+	public void setPermissions(String remotePath, int permissions) throws IOException {
+		try (SftpClient sftp = sftp()) {
+			sftp.setStat(remotePath, new SftpClient.Attributes().perms(permissions));
+		}
+	}
+
+	@Override
+	public synchronized ScpClient scp() throws IOException {
+		ensureOpen();
+		return ScpClientCreator.instance().createScpClient(session);
+	}
+
+	@Override
+	public synchronized ChannelExec execChannel(String command) throws IOException {
+		ensureOpen();
+		return session.createExecChannel(command);
+	}
+
 	/**
-	 * Atomically replace {@code targetPath} with {@code sourcePath} via SFTP
-	 * rename-with-overwrite (POSIX rename where the server supports it).
-	 * Falls back to a delete-then-rename when the server rejects the
-	 * overwriting rename; the fallback is not atomic and is logged.
+	 * {@inheritDoc}
 	 *
-	 * @param sourcePath the freshly uploaded sibling file
-	 * @param targetPath the final destination
-	 * @throws IOException if the replacement fails
+	 * <p>The channel rides on the same {@link ClientSession} as the SFTP mount,
+	 * so it costs no extra connection and no second authentication.
 	 */
+	@Override
+	public synchronized ChannelShell shellChannel() throws IOException {
+		ensureOpen();
+		return session.createShellChannel();
+	}
+
+	@Override
+	public synchronized String exec(String command) throws IOException {
+		ensureOpen();
+		return session.executeRemoteCommand(command);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>Uses SFTP rename-with-overwrite (POSIX rename where the server supports
+	 * it). Falls back to a delete-then-rename when the server rejects the
+	 * overwriting rename; the fallback is not atomic and is logged.
+	 */
+	@Override
 	public void atomicReplace(String sourcePath, String targetPath) throws IOException {
 		try (SftpClient sftp = sftp()) {
 			try {

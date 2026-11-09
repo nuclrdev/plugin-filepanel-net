@@ -54,9 +54,10 @@ import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 
 import dev.nuclr.plugin.core.panel.net.actions.NetActionsTest.RecordingCallback;
-import dev.nuclr.plugin.core.panel.net.ssh.NetConnection;
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
+import dev.nuclr.plugin.core.panel.net.ssh.SshConnection;
 
 /**
  * File modes through net.copy and net.write, against a server whose files have
@@ -137,7 +138,7 @@ class NetActionsPermissionsTest {
 		var store = new ServerStore(temp.resolve("servers.json"));
 		store.save(List.of(config));
 
-		connection = new NetConnection(config, AcceptAllServerKeyVerifier.INSTANCE, new NetConnection.CredentialsProvider() {
+		connection = new SshConnection(config, AcceptAllServerKeyVerifier.INSTANCE, new NetConnection.CredentialsProvider() {
 			@Override
 			public String password(ServerConfig cfg, int retryIndex) {
 				return PASSWORD;

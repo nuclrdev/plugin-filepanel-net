@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import lombok.extern.slf4j.Slf4j;
 
 /**

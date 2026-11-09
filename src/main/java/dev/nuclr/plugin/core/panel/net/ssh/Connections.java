@@ -22,6 +22,7 @@ import java.nio.file.Path;
 
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier;
 
+import dev.nuclr.plugin.core.panel.net.remote.NetConnection;
 import dev.nuclr.plugin.core.panel.net.ui.NetCredentialsPrompt;
 import lombok.extern.slf4j.Slf4j;
 
@@ -49,7 +50,7 @@ public final class Connections {
 	 */
 	public static NetConnection forConfig(ServerConfig config) {
 		return ConnectionRegistry.getOrCreate(config.getId(),
-				id -> new NetConnection(config, hostKeyVerifier(), NetCredentialsPrompt.INSTANCE));
+				id -> new SshConnection(config, hostKeyVerifier(), NetCredentialsPrompt.INSTANCE));
 	}
 
 	/**
