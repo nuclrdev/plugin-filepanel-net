@@ -19,11 +19,15 @@ package dev.nuclr.plugin.core.panel.net.ssh;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -153,6 +157,126 @@ public class ServerStore {
 	 */
 	public synchronized ServerConfig byId(String id) {
 		return load().stream().filter(config -> Objects.equals(config.getId(), id)).findFirst().orElse(null);
+	}
+
+	// =========================================================================
+	// Strict access for settings transfer (Configs > Export / Import)
+	// =========================================================================
+
+	/**
+	 * Load every entry exactly as stored, in file order: nothing is sorted or
+	 * collapsed, and an entry saved without an id keeps a {@code null} id
+	 * instead of a fresh random one. Unlike {@link #load()} an unreadable file
+	 * is an error, never an empty list.
+	 *
+	 * @return the stored entries; empty when the file does not exist
+	 * @throws IOException if the file exists but cannot be read or parsed
+	 */
+	public synchronized List<ServerConfig> loadStrictly() throws IOException {
+		var configs = new ArrayList<ServerConfig>();
+		for (Map<String, Object> raw : readRaw()) {
+			ServerConfig config;
+			try {
+				config = mapper.convertValue(raw, ServerConfig.class);
+			} catch (JacksonException e) {
+				throw new IOException("The saved Net servers cannot be read: " + e.getMessage(), e);
+			}
+			if (!(raw.get("id") instanceof String id) || id.isBlank()) {
+				config.setId(null);
+			}
+			configs.add(config);
+		}
+		return configs;
+	}
+
+	/**
+	 * Append the given profiles to the stored ones and write the combined list
+	 * once, atomically. Existing entries are kept exactly as stored. When this
+	 * throws, the file is unchanged.
+	 *
+	 * @param configs the profiles to add, each with its id already set
+	 * @throws IOException if the stored file exists but cannot be read, or the write fails
+	 */
+	public synchronized void addAll(List<ServerConfig> configs) throws IOException {
+		List<Map<String, Object>> all = readRaw();
+		for (ServerConfig config : configs) {
+			all.add(mapper.convertValue(config, new TypeReference<Map<String, Object>>() {}));
+		}
+		writeAtomically(all);
+	}
+
+	/**
+	 * Remove the entries with these ids (unknown ids are ignored) in one atomic
+	 * write. Throws like {@link #addAll}; when it throws, the file is unchanged.
+	 *
+	 * @param ids the ids to remove
+	 * @throws IOException if the stored file exists but cannot be read, or the write fails
+	 */
+	public synchronized void removeAll(Collection<String> ids) throws IOException {
+		if (!Files.exists(file)) {
+			return;
+		}
+		List<Map<String, Object>> all = readRaw();
+		all.removeIf(raw -> raw.get("id") instanceof String id && ids.contains(id));
+		writeAtomically(all);
+	}
+
+	/** The stored entries as raw maps, so a rewrite keeps whatever this build does not model. */
+	private List<Map<String, Object>> readRaw() throws IOException {
+		if (!Files.exists(file)) {
+			return new ArrayList<>();
+		}
+		if (!Files.isRegularFile(file)) {
+			throw new IOException("The saved Net servers are not a regular file: " + file);
+		}
+		List<Map<String, Object>> raw;
+		try {
+			raw = mapper.readValue(file.toFile(), new TypeReference<List<Map<String, Object>>>() {});
+		} catch (JacksonException e) {
+			throw new IOException("The saved Net servers cannot be read; not changing them: " + e.getMessage(), e);
+		}
+		var entries = new ArrayList<Map<String, Object>>();
+		if (raw != null) {
+			for (Map<String, Object> entry : raw) {
+				if (entry != null) {
+					entries.add(entry);
+				}
+			}
+		}
+		return entries;
+	}
+
+	/** Write to a temporary file next to the store, then move it over the store in one step. */
+	private void writeAtomically(List<Map<String, Object>> entries) throws IOException {
+		Path parent = file.toAbsolutePath().getParent();
+		Files.createDirectories(parent);
+		Path temp = Files.createTempFile(parent, file.getFileName().toString(), ".tmp");
+		try {
+			try {
+				mapper.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), entries);
+			} catch (JacksonException e) {
+				throw new IOException("Cannot write the Net servers: " + e.getMessage(), e);
+			}
+			replaceFile(temp, file);
+		} finally {
+			Files.deleteIfExists(temp);
+		}
+	}
+
+	/**
+	 * Move the freshly written {@code temp} over {@code target}. A separate step
+	 * so a test can make the final write fail.
+	 *
+	 * @param temp the complete new contents
+	 * @param target the store file
+	 * @throws IOException if the move fails
+	 */
+	protected void replaceFile(Path temp, Path target) throws IOException {
+		try {
+			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+		}
 	}
 
 }

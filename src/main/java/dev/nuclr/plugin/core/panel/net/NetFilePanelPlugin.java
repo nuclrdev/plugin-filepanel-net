@@ -63,6 +63,7 @@ import dev.nuclr.plugin.core.panel.net.ssh.RemotePaths;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerConfig;
 import dev.nuclr.plugin.core.panel.net.ssh.ServerStore;
 import dev.nuclr.plugin.core.panel.net.tail.NetTailWindow;
+import dev.nuclr.plugin.core.panel.net.transfer.NetTransfer;
 import dev.nuclr.plugin.core.panel.net.ui.NetConnectionDialog;
 import dev.nuclr.plugin.core.panel.net.ui.NetGoToFolderDialog;
 import lombok.extern.slf4j.Slf4j;
@@ -117,7 +118,25 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	/** The server connection backing {@link #currentFolder}, or {@code null} at the server list. */
 	private NetConnection currentConnection;
 
-	private final ServerStore serverStore = ServerStore.defaultStore();
+	private final ServerStore serverStore;
+
+	/** Configs > Export / Import of the saved servers; see {@link NetTransfer}. */
+	private final NetTransfer transfer;
+
+	/** The plugin as Commander creates it, over {@code ~/.nuclr/net/servers.json}. */
+	public NetFilePanelPlugin() {
+		this(ServerStore.defaultStore());
+	}
+
+	/**
+	 * A plugin over the given server list, for tests.
+	 *
+	 * @param serverStore where the saved servers live
+	 */
+	public NetFilePanelPlugin(ServerStore serverStore) {
+		this.serverStore = serverStore;
+		this.transfer = new NetTransfer(serverStore);
+	}
 
 	// =========================================================================
 	// Lifecycle
@@ -747,6 +766,12 @@ public final class NetFilePanelPlugin implements FilePanelNuclrPlugin {
 	@Override
 	public void act(BaseNuclrPlugin other, String actionType, List<NuclrResource> selectedResources,
 			NuclrResource focusedResource, Map<String, Object> data, NuclrPluginCallback callback) {
+
+		// Settings transfer (Configs > Export / Import), asked by Commander off the EDT.
+		if (NetTransfer.handles(actionType)) {
+			transfer.handle(actionType, data);
+			return;
+		}
 
 		// Actions declared in actions.json (agents, command palette). They need no
 		// pane, selection or open resource, so they run the same on a headless
